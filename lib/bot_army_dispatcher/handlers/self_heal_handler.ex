@@ -59,7 +59,8 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
         Logger.info("[SelfHealHandler] AI dispatch succeeded for #{target_bot}")
 
         BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
-          action_outcome: "success"
+          action_outcome: "success",
+          resolved_at: DateTime.utc_now()
         })
 
         publish_audit_event(target_bot, intent_id, :dispatched)

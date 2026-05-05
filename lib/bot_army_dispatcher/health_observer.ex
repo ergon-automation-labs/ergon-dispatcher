@@ -141,7 +141,7 @@ defmodule BotArmyDispatcher.HealthObserver do
       BotArmyDispatcher.IncidentStore.record(%{
         bot_name: bot_id,
         event_type: "stale",
-        severity: 0.8,
+        severity: stale_severity(stale_for_sec),
         observations: %{stale_for_sec: stale_for_sec}
       })
 
@@ -161,6 +161,11 @@ defmodule BotArmyDispatcher.HealthObserver do
           metadata: %{}
         }
       )
+
+      BotArmyDispatcher.IncidentStore.update_most_recent(bot_id, %{
+        action_outcome: "success",
+        resolved_at: DateTime.utc_now()
+      })
 
       Logger.info("[HealthObserver] Recorded bot recovered: #{bot_id}")
     end
@@ -201,5 +206,14 @@ defmodule BotArmyDispatcher.HealthObserver do
 
   defp handle_health_event(_message, _topic) do
     :ok
+  end
+
+  defp stale_severity(stale_for_sec) do
+    cond do
+      stale_for_sec >= 300 -> 1.0
+      stale_for_sec >= 120 -> 0.8
+      stale_for_sec >= 60 -> 0.6
+      true -> 0.4
+    end
   end
 end
