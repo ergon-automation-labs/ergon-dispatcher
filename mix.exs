@@ -12,6 +12,9 @@ defmodule BotArmyDispatcher.MixProject do
         dispatcher_bot: [
           applications: [bot_army_dispatcher: :permanent]
         ]
+      ],
+      dialyzer: [
+        ignore_warnings: ".dialyzer_ignore.exs"
       ]
     ]
   end
