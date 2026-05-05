@@ -34,7 +34,7 @@ defmodule BotArmyDispatcher.IncidentStore do
     case Repo.one(
            from(i in Incident,
              where: i.bot_name == ^bot_name and is_nil(i.action_outcome),
-             order_by: [desc: i.triggered_at],
+             order_by: [desc: i.triggered_at, desc: i.inserted_at],
              limit: 1
            )
          ) do
