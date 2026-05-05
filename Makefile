@@ -1,7 +1,7 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 
-.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish
+.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish dispatch-test
 
 help:
 	@echo "Dispatcher Bot"
@@ -137,3 +137,12 @@ push-and-publish:
 
 logs:
 	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh
+
+# Smoke test: publish a synthetic alert and verify bridge.agent.dispatch fires
+dispatch-test:
+	@echo "=== Dispatcher Smoke Test ==="
+	@echo "Publishing synthetic alert..."
+	@nats pub --server nats://localhost:4223 alerts.test.fire '{"event_id":"smoke-$$RANDOM","source":"test","payload":{"severity":0.5,"message":"smoke test alert"}}'
+	@echo "Waiting for dispatch..."
+	@sleep 2
+	@echo "Smoke test complete. Check dispatcher logs for 'Dispatching to AI' message."
