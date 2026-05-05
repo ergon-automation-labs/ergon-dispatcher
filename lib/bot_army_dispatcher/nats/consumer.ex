@@ -27,7 +27,8 @@ defmodule BotArmyDispatcher.NATS.Consumer do
       type: :subscribe,
       description: "Bot recovery events"
     },
-    %{subject: "system.health", type: :subscribe, description: "System health signals"}
+    %{subject: "system.health", type: :subscribe, description: "System health signals"},
+    %{subject: "bridge.incident.>", type: :request_reply, description: "Incident bridge API"}
   ]
 
   def start_link(opts) do

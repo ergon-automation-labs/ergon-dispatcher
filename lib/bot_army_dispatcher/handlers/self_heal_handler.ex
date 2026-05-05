@@ -25,6 +25,11 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       "[SelfHealHandler] Executing heal for #{target_bot}: intent_id=#{intent_id} score=#{score}"
     )
 
+    BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
+      healing_action: "diagnose",
+      action_outcome: "pending"
+    })
+
     dispatch_ai_diagnosis(target_bot, context, intent_id, score)
   end
 
@@ -52,11 +57,20 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
     case BotArmyRuntime.NATS.Publisher.publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[SelfHealHandler] AI dispatch succeeded for #{target_bot}")
+
+        BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
+          action_outcome: "success"
+        })
+
         publish_audit_event(target_bot, intent_id, :dispatched)
         :ok
 
       {:error, reason} ->
         Logger.error("[SelfHealHandler] AI dispatch failed for #{target_bot}: #{inspect(reason)}")
+
+        BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
+          action_outcome: "failure"
+        })
 
         escalate_to_human(target_bot, evidence, intent_id, score, reason)
     end

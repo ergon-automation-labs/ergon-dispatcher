@@ -138,6 +138,13 @@ defmodule BotArmyDispatcher.HealthObserver do
         }
       )
 
+      BotArmyDispatcher.IncidentStore.record(%{
+        bot_name: bot_id,
+        event_type: "stale",
+        severity: 0.8,
+        observations: %{stale_for_sec: stale_for_sec}
+      })
+
       Logger.info("[HealthObserver] Recorded bot stale: #{bot_id} (#{stale_for_sec}s)")
     end
   end
@@ -173,6 +180,20 @@ defmodule BotArmyDispatcher.HealthObserver do
           metadata: %{status: status}
         }
       )
+
+      severity =
+        case status do
+          "degraded" -> 0.5
+          "unhealthy" -> 0.9
+          _ -> 0.5
+        end
+
+      BotArmyDispatcher.IncidentStore.record(%{
+        bot_name: service,
+        event_type: "health_degraded",
+        severity: severity,
+        observations: %{status: status}
+      })
 
       Logger.info("[HealthObserver] Recorded health degraded: #{service} (#{status})")
     end
