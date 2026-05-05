@@ -14,11 +14,23 @@ defmodule BotArmyDispatcher.Application do
   def start(_type, _args) do
     children =
       []
+      |> maybe_add_health_observer()
+      |> maybe_add_intent_evaluator()
       |> maybe_add_pulse_publisher()
       |> maybe_add_consumer()
 
     opts = [strategy: :one_for_one, name: BotArmyDispatcher.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp maybe_add_health_observer(children) do
+    if @env == :test, do: children, else: [{BotArmyDispatcher.HealthObserver, []} | children]
+  end
+
+  defp maybe_add_intent_evaluator(children) do
+    if @env == :test,
+      do: children,
+      else: [{BotArmyDispatcher.IntentEvaluator, []} | children]
   end
 
   defp maybe_add_pulse_publisher(children) do

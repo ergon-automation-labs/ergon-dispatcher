@@ -20,7 +20,14 @@ defmodule BotArmyDispatcher.NATS.Consumer do
   @subjects [
     %{subject: "alerts.>", type: :subscribe, description: "All alert events"},
     %{subject: "dlq.>", type: :subscribe, description: "Dead-letter queue events"},
-    %{subject: "risk.critical", type: :subscribe, description: "Critical risk signals"}
+    %{subject: "risk.critical", type: :subscribe, description: "Critical risk signals"},
+    %{subject: "bot.army.health.stale", type: :subscribe, description: "Stale bot alerts"},
+    %{
+      subject: "bot.army.health.recovered",
+      type: :subscribe,
+      description: "Bot recovery events"
+    },
+    %{subject: "system.health", type: :subscribe, description: "System health signals"}
   ]
 
   def start_link(opts) do

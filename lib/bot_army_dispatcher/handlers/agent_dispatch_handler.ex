@@ -19,6 +19,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
 
     Logger.info("[AgentDispatchHandler] #{topic} severity=#{severity}")
 
+    record_dlq_event_if_applicable(topic)
+
     if severity <= @ai_severity_threshold do
       dispatch_to_ai(context)
     else
@@ -204,4 +206,35 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       System.get_env("BOT_ARMY_USER_ID") ||
       System.get_env("BOT_ARMY_CLAUDE_USER_ID")
   end
+
+  defp record_dlq_event_if_applicable(topic) do
+    if is_binary(topic) && (topic == "dlq" || String.starts_with?(topic, "dlq.")) do
+      bot_name = extract_bot_from_dlq_topic(topic)
+
+      if bot_name do
+        BotArmyRuntime.Intent.AccumulatedContext.record(
+          bot_name,
+          %{
+            type: :dlq_event,
+            value: 1,
+            metadata: %{source_topic: topic}
+          }
+        )
+
+        Logger.debug("[AgentDispatchHandler] Recorded DLQ event for #{bot_name}")
+      end
+    end
+  end
+
+  defp extract_bot_from_dlq_topic("dlq." <> rest) do
+    rest
+    |> String.split(".")
+    |> List.first()
+  end
+
+  defp extract_bot_from_dlq_topic("dlq") do
+    nil
+  end
+
+  defp extract_bot_from_dlq_topic(_), do: nil
 end
