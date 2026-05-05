@@ -51,26 +51,7 @@ defmodule BotArmyDispatcher.HealthObserver do
         BotArmyRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("[HealthObserver] Connected to NATS, subscribing to health topics")
 
-        subjects = ["bot.army.health.stale", "bot.army.health.recovered", "system.health"]
-
-        subscriptions =
-          subjects
-          |> Enum.map(fn subject ->
-            case Gnat.sub(conn, self(), subject) do
-              {:ok, sub} ->
-                Logger.info("[HealthObserver] Subscribed to #{subject}")
-                sub
-
-              {:error, reason} ->
-                Logger.error(
-                  "[HealthObserver] Failed to subscribe to #{subject}: #{inspect(reason)}"
-                )
-
-                nil
-            end
-          end)
-          |> Enum.filter(&(not is_nil(&1)))
-
+        subscriptions = setup_subscriptions(conn)
         BotArmyRuntime.Registry.register("health_observer", @subjects, @version)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
@@ -80,6 +61,25 @@ defmodule BotArmyDispatcher.HealthObserver do
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     end
+  end
+
+  defp setup_subscriptions(conn) do
+    subjects = ["bot.army.health.stale", "bot.army.health.recovered", "system.health"]
+
+    subjects
+    |> Enum.map(fn subject ->
+      case Gnat.sub(conn, self(), subject) do
+        {:ok, sub} ->
+          Logger.info("[HealthObserver] Subscribed to #{subject}")
+          sub
+
+        {:error, reason} ->
+          Logger.error("[HealthObserver] Failed to subscribe to #{subject}: #{inspect(reason)}")
+
+          nil
+      end
+    end)
+    |> Enum.filter(&(not is_nil(&1)))
   end
 
   @impl true

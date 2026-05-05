@@ -117,16 +117,17 @@ defmodule BotArmyDispatcher.Skills.Example do
       #   hint: :fast
       # )
 
-      {:ok, %{
-        message: "Example skill executed successfully",
-        content_length: byte_size(content),
-        result: result,
-        bot_id: ctx.bot_id,
-        executed_at: DateTime.utc_now() |> DateTime.to_iso8601()
-      }}
+      {:ok,
+       %{
+         message: "Example skill executed successfully",
+         content_length: byte_size(content),
+         result: result,
+         bot_id: ctx.bot_id,
+         executed_at: DateTime.utc_now() |> DateTime.to_iso8601()
+       }}
     rescue
       e ->
-        Logger.error("[Example] Execution failed", error: inspect(e))
+        Logger.error("[Example] Execution failed: #{inspect(e)}")
         {:error, :execution_failed}
     end
   end

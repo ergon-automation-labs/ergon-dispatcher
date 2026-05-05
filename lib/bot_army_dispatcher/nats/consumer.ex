@@ -48,26 +48,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
         BotArmyRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("[DispatcherConsumer] Connected to NATS, subscribing to topics")
 
-        subjects = ["alerts.>", "dlq.>", "risk.critical"]
-
-        subscriptions =
-          subjects
-          |> Enum.map(fn subject ->
-            case Gnat.sub(conn, self(), subject) do
-              {:ok, sub} ->
-                Logger.info("[DispatcherConsumer] Subscribed to #{subject}")
-                sub
-
-              {:error, reason} ->
-                Logger.error(
-                  "[DispatcherConsumer] Failed to subscribe to #{subject}: #{inspect(reason)}"
-                )
-
-                nil
-            end
-          end)
-          |> Enum.filter(&(not is_nil(&1)))
-
+        subscriptions = setup_subscriptions(conn)
         BotArmyRuntime.Registry.register("dispatcher", @subjects, @version)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
@@ -77,6 +58,27 @@ defmodule BotArmyDispatcher.NATS.Consumer do
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     end
+  end
+
+  defp setup_subscriptions(conn) do
+    subjects = ["alerts.>", "dlq.>", "risk.critical"]
+
+    subjects
+    |> Enum.map(fn subject ->
+      case Gnat.sub(conn, self(), subject) do
+        {:ok, sub} ->
+          Logger.info("[DispatcherConsumer] Subscribed to #{subject}")
+          sub
+
+        {:error, reason} ->
+          Logger.error(
+            "[DispatcherConsumer] Failed to subscribe to #{subject}: #{inspect(reason)}"
+          )
+
+          nil
+      end
+    end)
+    |> Enum.filter(&(not is_nil(&1)))
   end
 
   @impl true

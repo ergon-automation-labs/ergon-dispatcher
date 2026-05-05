@@ -84,17 +84,12 @@ defmodule BotArmyDispatcher.PulsePublisher do
 
     has_degradation =
       Enum.any?(tracked_bots, fn bot_name ->
-        case BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name) do
-          {:ok, snapshot} ->
-            summary = Map.get(snapshot, :summary, %{})
+        snapshot = BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name)
+        summary = Map.get(snapshot, :summary, %{})
 
-            Map.has_key?(summary, :bot_stale) ||
-              Map.has_key?(summary, :health_degraded) ||
-              Map.get(summary, :dlq_event, %{}) |> Map.get(:count, 0) > 0
-
-          {:error, _} ->
-            false
-        end
+        Map.has_key?(summary, :bot_stale) ||
+          Map.has_key?(summary, :health_degraded) ||
+          Map.get(summary, :dlq_event, %{}) |> Map.get(:count, 0) > 0
       end)
 
     if has_degradation, do: :degraded, else: :nominal

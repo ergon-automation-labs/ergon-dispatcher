@@ -48,30 +48,23 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   end
 
   defp evaluate_bot(bot_name) do
-    case BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name) do
-      {:ok, snapshot} ->
-        context = build_context_from_snapshot(snapshot)
+    snapshot = BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name)
+    context = build_context_from_snapshot(snapshot)
 
-        case BotArmyRuntime.Intent.ThresholdModel.evaluate(
-               "dispatcher",
-               "heal",
-               @thresholds,
-               context
-             ) do
-          {:ok, :act, details} ->
-            publish_heal_intent(bot_name, context, details)
+    case BotArmyRuntime.Intent.ThresholdModel.evaluate(
+           "dispatcher",
+           "heal",
+           @thresholds,
+           context
+         ) do
+      {:ok, :act, details} ->
+        publish_heal_intent(bot_name, context, details)
 
-          {:ok, decision, _details} ->
-            Logger.debug("[IntentEvaluator] Bot #{bot_name} decision: #{decision}, no action")
-
-          {:error, reason} ->
-            Logger.warning("[IntentEvaluator] Failed to evaluate #{bot_name}: #{inspect(reason)}")
-        end
+      {:ok, decision, _details} ->
+        Logger.debug("[IntentEvaluator] Bot #{bot_name} decision: #{decision}, no action")
 
       {:error, reason} ->
-        Logger.warning(
-          "[IntentEvaluator] Failed to get snapshot for #{bot_name}: #{inspect(reason)}"
-        )
+        Logger.warning("[IntentEvaluator] Failed to evaluate #{bot_name}: #{inspect(reason)}")
     end
   end
 

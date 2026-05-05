@@ -33,24 +33,18 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
   """
   def severity_from_payload(message, topic \\ nil) do
     payload = Map.get(message, "payload", %{}) || %{}
-    source = Map.get(message, "source", "")
-
-    topic = topic || source
+    topic = topic || Map.get(message, "source", "")
 
     cond do
-      topic == "risk.critical" ->
-        1.0
-
-      is_binary(topic) and (topic == "dlq" or String.starts_with?(topic, "dlq.")) ->
-        Map.get(payload, "severity", 0.6)
-
-      is_binary(topic) and (topic == "alerts" or String.starts_with?(topic, "alerts.")) ->
-        Map.get(payload, "severity", 0.5)
-
-      true ->
-        Map.get(payload, "severity", 0.3)
+      topic == "risk.critical" -> 1.0
+      dlq_topic?(topic) -> Map.get(payload, "severity", 0.6)
+      alert_topic?(topic) -> Map.get(payload, "severity", 0.5)
+      true -> Map.get(payload, "severity", 0.3)
     end
   end
+
+  defp dlq_topic?(topic), do: topic == "dlq" || String.starts_with?(topic, "dlq.")
+  defp alert_topic?(topic), do: topic == "alerts" || String.starts_with?(topic, "alerts.")
 
   @doc """
   Build the dispatch context from a message.
