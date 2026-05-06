@@ -69,12 +69,90 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       {:error, reason} ->
         Logger.error("[SelfHealHandler] AI dispatch failed for #{target_bot}: #{inspect(reason)}")
 
-        BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
-          action_outcome: "failure"
-        })
+        case BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
+               action_outcome: "failure"
+             }) do
+          {:ok, incident} ->
+            dispatch_pi_go_investigation(target_bot, incident, evidence, intent_id, score, reason)
 
-        escalate_to_human(target_bot, evidence, intent_id, score, reason)
+          {:error, _} ->
+            escalate_to_human(target_bot, evidence, intent_id, score, reason)
+        end
     end
+  end
+
+  defp dispatch_pi_go_investigation(
+         target_bot,
+         incident,
+         evidence,
+         intent_id,
+         score,
+         dispatch_error
+       ) do
+    {:ok, %{incidents: action_history}} =
+      BotArmyDispatcher.IncidentStore.list(bot_name: target_bot, limit: 5)
+
+    investigation_prompt =
+      format_investigation_prompt(target_bot, incident, action_history, evidence, dispatch_error)
+
+    envelope = %{
+      "event" => "pi-go.command.run",
+      "event_id" => Ecto.UUID.generate(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_dispatcher",
+      "tenant_id" => extract_tenant_id(),
+      "user_id" => extract_user_id(),
+      "payload" => %{
+        "command" => "analyze",
+        "correlation_id" => intent_id,
+        "prompt" => investigation_prompt
+      }
+    }
+
+    case BotArmyRuntime.NATS.Publisher.publish("pi-go.command.run", envelope) do
+      {:ok, _} ->
+        Logger.info("[SelfHealHandler] Pi-Go investigation dispatched for #{target_bot}")
+        publish_audit_event(target_bot, intent_id, :investigation_dispatched)
+        :ok
+
+      {:error, pi_go_error} ->
+        Logger.warning(
+          "[SelfHealHandler] Pi-Go dispatch failed for #{target_bot}: #{inspect(pi_go_error)}"
+        )
+
+        escalate_to_human(target_bot, evidence, intent_id, score, dispatch_error)
+    end
+  end
+
+  defp format_investigation_prompt(target_bot, incident, action_history, evidence, dispatch_error) do
+    """
+    Investigate a bot health incident and create a GTD task with your findings.
+
+    **Bot:** #{target_bot}
+    **Event Type:** #{incident.event_type}
+    **Severity:** #{incident.severity}
+    **Observations:** #{Jason.encode!(incident.observations)}
+    **Recent Actions (last 5):**
+    #{format_action_history(action_history)}
+    **AI Dispatch Error:** #{inspect(dispatch_error)}
+    **Additional Context:** #{Jason.encode!(evidence)}
+
+    **Steps:**
+    1. Use bridge.logs.query to search for recent events related to "#{target_bot}"
+    2. Analyze the incident context, logs, and action history
+    3. Identify likely root cause
+    4. Suggest 2-3 concrete remediation actions a human can execute
+    5. Create a GTD task via bridge.task.create with your findings and recommendations
+       (labels: ["dispatcher", "investigate", "#{target_bot}"])
+    """
+  end
+
+  defp format_action_history(incidents) do
+    incidents
+    |> Enum.map(fn i ->
+      "- #{i.event_type} (severity: #{i.severity}, outcome: #{i.action_outcome}, at: #{i.triggered_at})"
+    end)
+    |> Enum.join("\n")
   end
 
   defp escalate_to_human(target_bot, evidence, intent_id, score, dispatch_error) do
