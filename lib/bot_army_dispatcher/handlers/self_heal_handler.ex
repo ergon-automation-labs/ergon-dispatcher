@@ -113,6 +113,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       {:ok, _} ->
         Logger.info("[SelfHealHandler] Pi-Go investigation dispatched for #{target_bot}")
         publish_audit_event(target_bot, intent_id, :investigation_dispatched)
+        publish_discord_alert(target_bot)
         :ok
 
       {:error, pi_go_error} ->
@@ -191,6 +192,30 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
         )
 
         {:error, reason}
+    end
+  end
+
+  defp publish_discord_alert(target_bot) do
+    envelope = %{
+      "event" => "bridge.discord.message.send",
+      "source" => "bot_army_dispatcher",
+      "payload" => %{
+        "bot_name" => "dispatcher",
+        "channel" => "alerts",
+        "content" =>
+          "Bot `#{target_bot}` degraded — investigation dispatched to Pi-Go. Check GTD for findings.",
+        "username" => "Dispatcher"
+      }
+    }
+
+    case BotArmyRuntime.NATS.Publisher.publish("bridge.discord.message.send", envelope) do
+      {:ok, _} ->
+        Logger.debug("[SelfHealHandler] Discord alert published for #{target_bot}")
+
+      {:error, reason} ->
+        Logger.warning(
+          "[SelfHealHandler] Failed to publish Discord alert for #{target_bot}: #{inspect(reason)}"
+        )
     end
   end
 
