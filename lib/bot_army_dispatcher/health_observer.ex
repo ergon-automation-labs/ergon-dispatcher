@@ -28,13 +28,11 @@ defmodule BotArmyDispatcher.HealthObserver do
 
   @doc "Get list of tracked bot names with recent observations."
   def tracked_bots do
-    try do
-      Registry.select(BotArmyRuntime.Registry, [
-        {{{:accumulated_context, :"$1"}, :_}, [], [:"$1"]}
-      ])
-    rescue
-      _ -> []
-    end
+    Registry.select(BotArmyRuntime.Registry, [
+      {{{:accumulated_context, :"$1"}, :_}, [], [:"$1"]}
+    ])
+  rescue
+    _ -> []
   end
 
   @impl true

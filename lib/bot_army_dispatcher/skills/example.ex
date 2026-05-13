@@ -105,31 +105,29 @@ defmodule BotArmyDispatcher.Skills.Example do
 
   @impl true
   def execute(%{"content" => content}, ctx) do
-    try do
-      Logger.info("[Example] Executing with content length: #{byte_size(content)}")
+    Logger.info("[Example] Executing with content length: #{byte_size(content)}")
 
-      # Example 1: Simple processing (no LLM)
-      result = process_content(content)
+    # Example 1: Simple processing (no LLM)
+    result = process_content(content)
 
-      # Example 2: LLM integration (optional)
-      # {:ok, llm_result} = ctx.llm.request(
-      #   "Analyze this: " <> content,
-      #   hint: :fast
-      # )
+    # Example 2: LLM integration (optional)
+    # {:ok, llm_result} = ctx.llm.request(
+    #   "Analyze this: " <> content,
+    #   hint: :fast
+    # )
 
-      {:ok,
-       %{
-         message: "Example skill executed successfully",
-         content_length: byte_size(content),
-         result: result,
-         bot_id: ctx.bot_id,
-         executed_at: DateTime.utc_now() |> DateTime.to_iso8601()
-       }}
-    rescue
-      e ->
-        Logger.error("[Example] Execution failed: #{inspect(e)}")
-        {:error, :execution_failed}
-    end
+    {:ok,
+     %{
+       message: "Example skill executed successfully",
+       content_length: byte_size(content),
+       result: result,
+       bot_id: ctx.bot_id,
+       executed_at: DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
+  rescue
+    e ->
+      Logger.error("[Example] Execution failed: #{inspect(e)}")
+      {:error, :execution_failed}
   end
 
   # ============================================================================

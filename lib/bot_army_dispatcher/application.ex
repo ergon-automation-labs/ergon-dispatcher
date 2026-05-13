@@ -20,6 +20,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_pulse_publisher()
       |> maybe_add_consumer()
       |> maybe_add_incident_responder()
+      |> maybe_add_outcome_tracker()
 
     opts = [strategy: :one_for_one, name: BotArmyDispatcher.Supervisor]
     Supervisor.start_link(children, opts)
@@ -51,5 +52,9 @@ defmodule BotArmyDispatcher.Application do
     if @env == :test,
       do: children,
       else: [{BotArmyDispatcher.Handlers.IncidentResponder, []} | children]
+  end
+
+  defp maybe_add_outcome_tracker(children) do
+    if @env == :test, do: children, else: [{BotArmyLearning.OutcomeTracker, []} | children]
   end
 end

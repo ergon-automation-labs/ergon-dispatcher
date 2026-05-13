@@ -20,8 +20,8 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
   use GenServer
   require Logger
 
-  alias BotArmyRuntime.NATS.Reply
   alias BotArmyDispatcher.IncidentStore
+  alias BotArmyRuntime.NATS.Reply
 
   @reconnect_delay_ms 5000
   @version Mix.Project.config()[:version]
@@ -143,36 +143,26 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
       |> add_opt(:action_outcome, action_outcome)
       |> add_opt(:since, since)
 
-    case IncidentStore.list(opts) do
-      {:ok, result} ->
-        reply(msg, Reply.ok(result))
-
-      {:error, reason} ->
-        Logger.warning("[IncidentResponder] Failed to list incidents: #{inspect(reason)}")
-        reply(msg, Reply.error(inspect(reason), :database_error))
-    end
+    {:ok, result} = IncidentStore.list(opts)
+    reply(msg, Reply.ok(result))
   end
 
   defp handle_get_request(msg) do
-    with {:ok, params} <- decode_json(msg.body),
-         incident_id when is_binary(incident_id) <- Map.get(params, "id") do
-      case IncidentStore.get(incident_id) do
-        {:ok, incident} ->
-          reply(msg, Reply.ok(%{incident: incident}))
+    case decode_json(msg.body) do
+      {:ok, %{"id" => incident_id}} when is_binary(incident_id) ->
+        case IncidentStore.get(incident_id) do
+          {:ok, incident} ->
+            reply(msg, Reply.ok(%{incident: incident}))
 
-        {:error, :not_found} ->
-          reply(msg, Reply.error("Incident not found", :not_found))
+          {:error, :not_found} ->
+            reply(msg, Reply.error("Incident not found", :not_found))
+        end
 
-        {:error, reason} ->
-          Logger.warning("[IncidentResponder] Failed to get incident: #{inspect(reason)}")
-          reply(msg, Reply.error(inspect(reason), :database_error))
-      end
-    else
-      :error ->
-        reply(msg, Reply.error("Invalid JSON in request body", :invalid_json))
-
-      nil ->
+      {:ok, _params} ->
         reply(msg, Reply.error("Missing required field: id", :missing_field))
+
+      {:error, _reason} ->
+        reply(msg, Reply.error("Invalid JSON in request body", :invalid_json))
     end
   end
 
@@ -182,12 +172,7 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
     with {:ok, conn} <- GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
       headers = BotArmyRuntime.Tracing.inject_trace_context([])
 
-      payload =
-        cond do
-          is_binary(body) -> body
-          is_map(body) -> Jason.encode!(body)
-          true -> to_string(body)
-        end
+      payload = Jason.encode!(body)
 
       Gnat.pub(conn, reply_to, payload, headers: headers)
     end

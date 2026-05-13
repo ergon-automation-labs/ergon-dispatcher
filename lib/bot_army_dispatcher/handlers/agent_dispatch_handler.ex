@@ -8,7 +8,11 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
 
   require Logger
 
-  @ai_severity_threshold 0.7
+  defp ai_severity_threshold do
+    base = 0.7
+    factor = BotArmyLearning.ThresholdAdapter.adjustment("dispatcher.ai_dispatch")
+    BotArmyLearning.ThresholdAdapter.apply_adjustment(base, factor)
+  end
 
   @doc """
   Main entry point. Receives a decoded NATS envelope and the topic.
@@ -21,7 +25,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
 
     record_dlq_event_if_applicable(message, topic)
 
-    if severity <= @ai_severity_threshold do
+    if severity <= ai_severity_threshold() do
       dispatch_to_ai(context)
     else
       escalate_to_human(context)

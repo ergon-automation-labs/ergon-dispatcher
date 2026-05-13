@@ -8,3 +8,6 @@ config :bot_army_dispatcher, BotArmyDispatcher.Repo,
   port: 30003,
   username: "postgres",
   password: "postgres"
+
+config :bot_army_dispatcher,
+  factory_fixer_routing_enabled: true

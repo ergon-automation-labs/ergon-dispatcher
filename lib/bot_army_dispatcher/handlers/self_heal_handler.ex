@@ -63,11 +63,25 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           resolved_at: DateTime.utc_now()
         })
 
+        BotArmyLearning.OutcomeTracker.record(
+          intent_id,
+          "dispatcher.heal",
+          "act",
+          "success"
+        )
+
         publish_audit_event(target_bot, intent_id, :dispatched)
         :ok
 
       {:error, reason} ->
         Logger.error("[SelfHealHandler] AI dispatch failed for #{target_bot}: #{inspect(reason)}")
+
+        BotArmyLearning.OutcomeTracker.record(
+          intent_id,
+          "dispatcher.heal",
+          "act",
+          "failure"
+        )
 
         case BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
                action_outcome: "failure"
@@ -149,11 +163,9 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
   end
 
   defp format_action_history(incidents) do
-    incidents
-    |> Enum.map(fn i ->
+    Enum.map_join(incidents, "\n", fn i ->
       "- #{i.event_type} (severity: #{i.severity}, outcome: #{i.action_outcome}, at: #{i.triggered_at})"
     end)
-    |> Enum.join("\n")
   end
 
   defp escalate_to_human(target_bot, evidence, intent_id, score, dispatch_error) do

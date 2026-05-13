@@ -43,6 +43,19 @@ if [[ $push_to_main -eq 1 ]]; then
   }
 
   echo ""
+  echo "🕵️  Checking for Mix.env() in runtime code..."
+  if grep -r "Mix.env()" lib/ --include="*.ex" 2>/dev/null | grep -v "@env Mix.env()" > /dev/null; then
+    echo "❌ Mix.env() found in runtime code. Use @env Mix.env() for compile-time access instead."
+    exit 1
+  fi
+
+  echo ""
+  echo "📝 Running credo..."
+  "$MIX_BIN" credo --strict || {
+    echo "❌ Credo checks failed - push aborted"
+    exit 1
+  }
+
   echo "🧪 Running tests..."
   "$MIX_BIN" test || {
     echo "❌ Tests failed - push aborted"

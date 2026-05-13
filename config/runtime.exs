@@ -8,3 +8,11 @@ config :bot_army_dispatcher, BotArmyDispatcher.Repo,
   port: String.to_integer(System.get_env("DATABASE_PORT") || "30003"),
   username: System.get_env("DATABASE_USER") || "postgres",
   password: System.get_env("DATABASE_PASSWORD") || "postgres"
+
+config :bot_army_dispatcher,
+  factory_fixer_routing_enabled:
+    String.downcase(System.get_env("DISPATCHER_FACTORY_FIXER_ROUTING_ENABLED", "true")) in [
+      "1",
+      "true",
+      "yes"
+    ]
