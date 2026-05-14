@@ -19,8 +19,6 @@ defmodule BotArmyDispatcher.RetryConfidenceOracle do
   require Logger
 
   @nats_timeout_ms 2000
-  @min_srs_confidence 0.4
-  @min_sre_health :nominal
 
   def fetch(bot_name) when is_binary(bot_name) do
     with {:ok, srs_signal} <- fetch_srs_signal(),

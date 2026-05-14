@@ -33,7 +33,11 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   def init(opts) do
     Logger.info("[IntentEvaluator] Starting intent evaluator (30s interval)")
     send(self(), :evaluate)
-    {:ok, %{opts: opts}}
+    {:ok, %{opts: opts, confidence_cache: %{}}}
+  end
+
+  def get_confidence(bot_name) do
+    GenServer.call(__MODULE__, {:get_confidence, bot_name})
   end
 
   @impl true
@@ -42,30 +46,42 @@ defmodule BotArmyDispatcher.IntentEvaluator do
 
     tracked_bots = BotArmyDispatcher.HealthObserver.tracked_bots()
 
-    Enum.each(tracked_bots, &evaluate_bot/1)
+    new_cache =
+      Enum.reduce(tracked_bots, state.confidence_cache, fn bot_name, cache ->
+        evaluate_bot(bot_name, cache)
+      end)
 
-    {:noreply, state}
+    {:noreply, Map.put(state, :confidence_cache, new_cache)}
   end
 
-  defp evaluate_bot(bot_name) do
+  @impl true
+  def handle_call({:get_confidence, bot_name}, _from, state) do
+    result = Map.get(state.confidence_cache, bot_name, %{})
+    {:reply, result, state}
+  end
+
+  defp evaluate_bot(bot_name, cache) do
     snapshot = BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name)
     context = build_context_from_snapshot(snapshot)
 
     case BotArmyDispatcher.RetryConfidenceOracle.fetch(bot_name) do
       {:ok, oracle_result} ->
-        evaluate_with_confidence(bot_name, context, oracle_result)
+        evaluate_with_confidence(bot_name, context, oracle_result, cache)
 
       {:error, reason} ->
         Logger.debug(
           "[IntentEvaluator] Oracle fetch failed for #{bot_name}: #{inspect(reason)}, proceeding without confidence"
         )
 
-        evaluate_without_confidence(bot_name, context)
+        evaluate_without_confidence(bot_name, context, cache)
     end
   end
 
-  defp evaluate_with_confidence(bot_name, context, oracle_result) do
-    %{confidence: _conf, decision: decision, signals: signals} = oracle_result
+  defp evaluate_with_confidence(bot_name, context, oracle_result, cache) do
+    %{decision: decision, signals: signals} = oracle_result
+
+    # Cache the result
+    new_cache = Map.put(cache, bot_name, oracle_result)
 
     case decision do
       :skip ->
@@ -74,22 +90,23 @@ defmodule BotArmyDispatcher.IntentEvaluator do
         )
 
         emit_retry_skipped_event(bot_name, oracle_result)
+        new_cache
 
       :normal ->
-        evaluate_threshold(bot_name, context, %{})
+        evaluate_threshold(bot_name, context, %{}, new_cache)
 
       :extended ->
         # Halve weight of stale_count for borderline confidence
         adjustments = %{"bot_stale_count" => 0.5}
-        evaluate_threshold(bot_name, context, adjustments)
+        evaluate_threshold(bot_name, context, adjustments, new_cache)
     end
   end
 
-  defp evaluate_without_confidence(bot_name, context) do
-    evaluate_threshold(bot_name, context, %{})
+  defp evaluate_without_confidence(bot_name, context, cache) do
+    evaluate_threshold(bot_name, context, %{}, cache)
   end
 
-  defp evaluate_threshold(bot_name, context, adjustments) do
+  defp evaluate_threshold(bot_name, context, adjustments, cache) do
     case BotArmyRuntime.Intent.ThresholdModel.evaluate(
            "dispatcher",
            "heal",
@@ -99,12 +116,15 @@ defmodule BotArmyDispatcher.IntentEvaluator do
          ) do
       {:ok, :act, details} ->
         publish_heal_intent(bot_name, context, details)
+        cache
 
       {:ok, decision, _details} ->
         Logger.debug("[IntentEvaluator] Bot #{bot_name} decision: #{decision}, no action")
+        cache
 
       {:error, reason} ->
         Logger.warning("[IntentEvaluator] Failed to evaluate #{bot_name}: #{inspect(reason)}")
+        cache
     end
   end
 
