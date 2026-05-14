@@ -51,11 +51,51 @@ defmodule BotArmyDispatcher.IntentEvaluator do
     snapshot = BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name)
     context = build_context_from_snapshot(snapshot)
 
+    case BotArmyDispatcher.RetryConfidenceOracle.fetch(bot_name) do
+      {:ok, oracle_result} ->
+        evaluate_with_confidence(bot_name, context, oracle_result)
+
+      {:error, reason} ->
+        Logger.debug(
+          "[IntentEvaluator] Oracle fetch failed for #{bot_name}: #{inspect(reason)}, proceeding without confidence"
+        )
+
+        evaluate_without_confidence(bot_name, context)
+    end
+  end
+
+  defp evaluate_with_confidence(bot_name, context, oracle_result) do
+    %{confidence: _conf, decision: decision, signals: signals} = oracle_result
+
+    case decision do
+      :skip ->
+        Logger.info(
+          "[IntentEvaluator] Retry confidence too low for #{bot_name}, skipping: #{inspect(signals)}"
+        )
+
+        emit_retry_skipped_event(bot_name, oracle_result)
+
+      :normal ->
+        evaluate_threshold(bot_name, context, %{})
+
+      :extended ->
+        # Halve weight of stale_count for borderline confidence
+        adjustments = %{"bot_stale_count" => 0.5}
+        evaluate_threshold(bot_name, context, adjustments)
+    end
+  end
+
+  defp evaluate_without_confidence(bot_name, context) do
+    evaluate_threshold(bot_name, context, %{})
+  end
+
+  defp evaluate_threshold(bot_name, context, adjustments) do
     case BotArmyRuntime.Intent.ThresholdModel.evaluate(
            "dispatcher",
            "heal",
            @thresholds,
-           context
+           context,
+           adjustments
          ) do
       {:ok, :act, details} ->
         publish_heal_intent(bot_name, context, details)
@@ -66,6 +106,19 @@ defmodule BotArmyDispatcher.IntentEvaluator do
       {:error, reason} ->
         Logger.warning("[IntentEvaluator] Failed to evaluate #{bot_name}: #{inspect(reason)}")
     end
+  end
+
+  defp emit_retry_skipped_event(bot_name, oracle_result) do
+    %{confidence: confidence, signals: signals} = oracle_result
+
+    payload = %{
+      "bot_name" => bot_name,
+      "confidence" => confidence,
+      "signals" => signals,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    BotArmyRuntime.NATS.Publisher.publish("events.dispatcher.retry.skipped", payload)
   end
 
   defp build_context_from_snapshot(snapshot) do
