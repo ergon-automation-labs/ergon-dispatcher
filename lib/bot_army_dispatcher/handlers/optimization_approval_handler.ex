@@ -68,55 +68,49 @@ defmodule BotArmyDispatcher.Handlers.OptimizationApprovalHandler do
   defp extract_proposal_id(_), do: :error
 
   defp update_proposal_status(proposal_id, status) do
-    try do
-      import Ecto.Query
+    import Ecto.Query
 
-      BotArmyLearning.Repo.update_all(
-        from(p in "learning_optimization_proposals",
-          where: p.id == ^proposal_id
-        ),
-        set: [status: status, reviewed_at: DateTime.utc_now()]
-      )
+    BotArmyLearning.Repo.update_all(
+      from(p in "learning_optimization_proposals",
+        where: p.id == ^proposal_id
+      ),
+      set: [status: status, reviewed_at: DateTime.utc_now()]
+    )
 
-      :ok
-    rescue
-      _ -> {:error, :db_error}
-    end
+    :ok
+  rescue
+    _ -> {:error, :db_error}
   end
 
   defp apply_optimization(proposal_id) do
-    try do
-      # Fetch the approved proposal from DB
-      proposal = fetch_proposal(proposal_id)
+    # Fetch the approved proposal from DB
+    proposal = fetch_proposal(proposal_id)
 
-      case proposal do
-        nil ->
-          Logger.warning("[OptimizationApprovalHandler] Proposal #{proposal_id} not found")
+    case proposal do
+      nil ->
+        Logger.warning("[OptimizationApprovalHandler] Proposal #{proposal_id} not found")
 
-        %{category: category, type: "threshold_adjustment", proposed_value: value} ->
-          apply_threshold_adjustment(category, value)
+      %{category: category, type: "threshold_adjustment", proposed_value: value} ->
+        apply_threshold_adjustment(category, value)
 
-        _ ->
-          Logger.info("[OptimizationApprovalHandler] No action for proposal type")
-      end
-    rescue
-      e ->
-        Logger.error("[OptimizationApprovalHandler] apply_optimization failed: #{inspect(e)}")
+      _ ->
+        Logger.info("[OptimizationApprovalHandler] No action for proposal type")
     end
+  rescue
+    e ->
+      Logger.error("[OptimizationApprovalHandler] apply_optimization failed: #{inspect(e)}")
   end
 
   defp fetch_proposal(proposal_id) do
-    try do
-      import Ecto.Query
+    import Ecto.Query
 
-      BotArmyLearning.Repo.one(
-        from(p in "learning_optimization_proposals",
-          where: p.id == ^proposal_id
-        )
+    BotArmyLearning.Repo.one(
+      from(p in "learning_optimization_proposals",
+        where: p.id == ^proposal_id
       )
-    rescue
-      _ -> nil
-    end
+    )
+  rescue
+    _ -> nil
   end
 
   defp apply_threshold_adjustment(category, proposed_value) do

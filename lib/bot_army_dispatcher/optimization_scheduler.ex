@@ -84,10 +84,9 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
   defp build_analysis_prompt(stats) do
     formatted_stats =
       stats
-      |> Enum.map(fn {category, %{total: total, correct: correct, accuracy: accuracy}} ->
+      |> Enum.map_join("\n", fn {category, %{total: total, correct: correct, accuracy: accuracy}} ->
         "  - #{category}: #{correct}/#{total} correct (#{Float.round(accuracy * 100, 1)}% accuracy)"
       end)
-      |> Enum.join("\n")
 
     current_thresholds = format_current_thresholds()
 

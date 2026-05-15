@@ -70,15 +70,19 @@ defmodule BotArmyDispatcher.RetryConfidenceOracle do
   end
 
   defp fetch_success_rate(bot_name) do
-    case BotArmyLearning.OutcomeTracker.recent_outcomes("dispatcher.heal", bot_name, 10) do
-      [] ->
-        0.5
+    outcomes =
+      BotArmyRuntime.Intent.OutcomeTracker.recent_outcomes("dispatcher", "heal", limit: 10)
 
-      outcomes ->
-        successes =
-          Enum.count(outcomes, fn {_id, _action, status, _reason} -> status == "success" end)
+    bot_outcomes =
+      Enum.filter(outcomes, fn %{outcome_metadata: meta} ->
+        Map.get(meta || %{}, "target_bot") == bot_name
+      end)
 
-        successes / length(outcomes)
+    if length(bot_outcomes) < 3 do
+      0.5
+    else
+      successes = Enum.count(bot_outcomes, fn %{outcome: outcome} -> outcome == "success" end)
+      successes / length(bot_outcomes)
     end
   rescue
     _ ->

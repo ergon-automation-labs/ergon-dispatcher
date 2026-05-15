@@ -28,7 +28,12 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
 
   @subjects [
     %{subject: "bridge.incident.list", type: :request_reply, description: "List incidents"},
-    %{subject: "bridge.incident.get", type: :request_reply, description: "Get incident by ID"}
+    %{subject: "bridge.incident.get", type: :request_reply, description: "Get incident by ID"},
+    %{
+      subject: "dispatcher.retry.confidence",
+      type: :request_reply,
+      description: "Query oracle confidence for a bot"
+    }
   ]
 
   def start_link(opts) do
@@ -62,7 +67,7 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
   end
 
   defp setup_subscriptions(conn) do
-    subjects = ["bridge.incident.list", "bridge.incident.get"]
+    subjects = ["bridge.incident.list", "bridge.incident.get", "dispatcher.retry.confidence"]
 
     subjects
     |> Enum.map(fn subject ->
@@ -95,6 +100,7 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
       case msg.topic do
         "bridge.incident.list" -> handle_list_request(msg)
         "bridge.incident.get" -> handle_get_request(msg)
+        "dispatcher.retry.confidence" -> handle_confidence_request(msg)
         _ -> :ok
       end
     end)
@@ -160,6 +166,20 @@ defmodule BotArmyDispatcher.Handlers.IncidentResponder do
 
       {:ok, _params} ->
         reply(msg, Reply.error("Missing required field: id", :missing_field))
+
+      {:error, _reason} ->
+        reply(msg, Reply.error("Invalid JSON in request body", :invalid_json))
+    end
+  end
+
+  defp handle_confidence_request(msg) do
+    case decode_json(msg.body) do
+      {:ok, %{"bot_name" => bot_name}} when is_binary(bot_name) ->
+        result = BotArmyDispatcher.IntentEvaluator.get_confidence(bot_name)
+        reply(msg, Reply.ok(result))
+
+      {:ok, _params} ->
+        reply(msg, Reply.error("Missing required field: bot_name", :missing_field))
 
       {:error, _reason} ->
         reply(msg, Reply.error("Invalid JSON in request body", :invalid_json))
