@@ -111,21 +111,19 @@ defmodule BotArmyDispatcher.RetryConfidenceOracle do
   defp decide(_), do: :skip
 
   defp request_nats(subject, payload) do
-    try do
-      case BotArmyRuntime.NATS.Publisher.request(
-             subject,
-             payload,
-             timeout_ms: @nats_timeout_ms
-           ) do
-        {:ok, response} ->
-          {:ok, response}
+    case BotArmyRuntime.NATS.Publisher.request(
+           subject,
+           payload,
+           timeout_ms: @nats_timeout_ms
+         ) do
+      {:ok, response} ->
+        {:ok, response}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      e ->
-        {:error, e}
+      {:error, reason} ->
+        {:error, reason}
     end
+  rescue
+    e ->
+      {:error, e}
   end
 end
