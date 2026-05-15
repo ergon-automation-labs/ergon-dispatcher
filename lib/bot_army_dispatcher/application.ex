@@ -21,6 +21,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_consumer()
       |> maybe_add_incident_responder()
       |> maybe_add_outcome_tracker()
+      |> maybe_add_optimization_scheduler()
 
     opts = [strategy: :one_for_one, name: BotArmyDispatcher.Supervisor]
     Supervisor.start_link(children, opts)
@@ -56,5 +57,11 @@ defmodule BotArmyDispatcher.Application do
 
   defp maybe_add_outcome_tracker(children) do
     if @env == :test, do: children, else: [{BotArmyLearning.OutcomeTracker, []} | children]
+  end
+
+  defp maybe_add_optimization_scheduler(children) do
+    if @env == :test,
+      do: children,
+      else: [{BotArmyDispatcher.OptimizationScheduler, []} | children]
   end
 end
