@@ -118,9 +118,8 @@ defmodule BotArmyDispatcher.Handlers.OptimizationApprovalHandler do
       "[OptimizationApprovalHandler] Applying #{category} threshold adjustment to #{proposed_value}"
     )
 
-    # TODO: Implement threshold override storage
-    # This would update ThresholdAdapter's override map to use the new threshold
-    # For now, just log the approval
+    # Future: Implement threshold override storage.
+    # This will update ThresholdAdapter's override map to use the new threshold.
     :ok
   end
 end

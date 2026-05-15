@@ -35,15 +35,14 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
 
   @impl true
   def handle_info(:run_analysis, state) do
-    try do
-      run_analysis()
-    rescue
-      e ->
-        Logger.error("[OptimizationScheduler] Analysis failed: #{inspect(e)}")
-    end
-
+    run_analysis()
     schedule_analysis(state.interval)
     {:noreply, state}
+  rescue
+    e ->
+      Logger.error("[OptimizationScheduler] Analysis failed: #{inspect(e)}")
+      schedule_analysis(state.interval)
+      {:noreply, state}
   end
 
   # ── Private ──────────────────────────────────────────────
@@ -132,51 +131,47 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
   end
 
   defp call_llm(prompt) do
-    try do
-      request_payload = %{
-        "request_id" => Ecto.UUID.generate(),
-        "request_type" => "chat",
-        "prompt_context" => %{"prompt" => prompt},
-        "text" => prompt,
-        "model_preference" => "auto",
-        "reply_subject" => "optimization.response",
-        "timeout_ms" => 60_000,
-        "priority" => "background",
-        "deadline_ms" => 60_000,
-        "degrade_ok" => true
-      }
+    request_payload = %{
+      "request_id" => Ecto.UUID.generate(),
+      "request_type" => "chat",
+      "prompt_context" => %{"prompt" => prompt},
+      "text" => prompt,
+      "model_preference" => "auto",
+      "reply_subject" => "optimization.response",
+      "timeout_ms" => 60_000,
+      "priority" => "background",
+      "deadline_ms" => 60_000,
+      "degrade_ok" => true
+    }
 
-      subject = "pi-go.llm.request.chat.background"
+    subject = "pi-go.llm.request.chat.background"
 
-      with {:ok, conn} <-
-             GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000),
-           {:ok, %{body: body}} <-
-             Gnat.request(conn, subject, Jason.encode!(request_payload), receive_timeout: 65_000),
-           {:ok, response} <- Jason.decode(body) do
-        content = response["content"] || response["completion"] || response["response"]
-        {:ok, content}
-      else
-        {:error, reason} -> {:error, reason}
-        other -> {:error, inspect(other)}
-      end
-    rescue
-      e -> {:error, inspect(e)}
+    with {:ok, conn} <-
+           GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000),
+         {:ok, %{body: body}} <-
+           Gnat.request(conn, subject, Jason.encode!(request_payload), receive_timeout: 65_000),
+         {:ok, response} <- Jason.decode(body) do
+      content = response["content"] || response["completion"] || response["response"]
+      {:ok, content}
+    else
+      {:error, reason} -> {:error, reason}
+      other -> {:error, inspect(other)}
     end
+  rescue
+    e -> {:error, inspect(e)}
   end
 
   defp parse_proposals(response_text) do
-    try do
-      # Extract JSON array from response (LLM may include extra text)
-      case extract_json_array(response_text) do
-        {:ok, proposals} ->
-          Enum.filter_map(proposals, &valid_proposal?/1, &parse_proposal_item/1)
+    # Extract JSON array from response (LLM may include extra text)
+    case extract_json_array(response_text) do
+      {:ok, proposals} ->
+        Enum.filter_map(proposals, &valid_proposal?/1, &parse_proposal_item/1)
 
-        _ ->
-          []
-      end
-    rescue
-      _ -> []
+      _ ->
+        []
     end
+  rescue
+    _ -> []
   end
 
   defp extract_json_array(text) do
@@ -223,25 +218,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
     proposal_with_id = Map.put(proposal, :id, Ecto.UUID.generate())
 
     # Store in DB
-    try do
-      proposal_with_id
-      |> Map.put(:status, "pending")
-      |> then(fn p ->
-        %BotArmyLearning.Schema.OptimizationProposal{
-          id: p.id,
-          category: p.category,
-          type: p.type,
-          current_value: p.current_value,
-          proposed_value: p.proposed_value,
-          reason: p.reason,
-          status: "pending",
-          proposed_at: p.proposed_at
-        }
-      end)
-      |> BotArmyLearning.Repo.insert()
-    rescue
-      _ -> :ok
-    end
+    persist_proposal_to_db(proposal_with_id)
 
     # Publish event for operator notification
     event = %{
@@ -252,60 +229,80 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
       "payload" => proposal_with_id
     }
 
-    try do
-      BotArmyRuntime.NATS.Publisher.publish("events.learning.optimization_proposal", event)
-    rescue
-      _ -> :ok
-    end
+    publish_nats_proposal_event(event)
 
     # Create GTD task for operator review
     create_gtd_task_for_proposal(proposal_with_id)
   end
 
+  defp persist_proposal_to_db(proposal_with_id) do
+    proposal_with_id
+    |> Map.put(:status, "pending")
+    |> then(fn p ->
+      %BotArmyLearning.Schema.OptimizationProposal{
+        id: p.id,
+        category: p.category,
+        type: p.type,
+        current_value: p.current_value,
+        proposed_value: p.proposed_value,
+        reason: p.reason,
+        status: "pending",
+        proposed_at: p.proposed_at
+      }
+    end)
+    |> BotArmyLearning.Repo.insert()
+  rescue
+    _ -> :ok
+  end
+
+  defp publish_nats_proposal_event(event) do
+    BotArmyRuntime.NATS.Publisher.publish("events.learning.optimization_proposal", event)
+  rescue
+    _ -> :ok
+  end
+
   defp create_gtd_task_for_proposal(proposal) do
-    try do
-      title = "Review: #{proposal.category} #{proposal.type}"
+    title = "Review: #{proposal.category} #{proposal.type}"
 
-      description =
-        """
-        **Optimization Proposal**
+    description =
+      """
+      **Optimization Proposal**
 
-        Category: #{proposal.category}
-        Type: #{proposal.type}
+      Category: #{proposal.category}
+      Type: #{proposal.type}
 
-        Current Value: #{proposal.current_value}
-        Proposed Value: #{proposal.proposed_value}
+      Current Value: #{proposal.current_value}
+      Proposed Value: #{proposal.proposed_value}
 
-        Reasoning: #{proposal.reason}
+      Reasoning: #{proposal.reason}
 
-        Status: Pending Review
+      Status: Pending Review
 
-        Use `/accept` to approve or `/reject` to decline.
-        """
+      Use `/accept` to approve or `/reject` to decline.
+      """
 
-      task_payload = %{
-        "title" => title,
-        "description" => description,
-        "context" => "learning",
-        "priority" => "normal",
-        "labels" => ["learning-optimization", "proposal-review"],
-        "metadata" => %{
-          "proposal_id" => proposal.id,
-          "category" => proposal.category
-        }
+    task_payload = %{
+      "title" => title,
+      "description" => description,
+      "context" => "learning",
+      "priority" => "normal",
+      "labels" => ["learning-optimization", "proposal-review"],
+      "metadata" => %{
+        "proposal_id" => proposal.id,
+        "category" => proposal.category
       }
+    }
 
-      envelope = %{
-        "event" => "bridge.task.create",
-        "event_id" => Ecto.UUID.generate(),
-        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-        "source" => "bot_army_dispatcher",
-        "payload" => task_payload
-      }
+    envelope = %{
+      "event" => "bridge.task.create",
+      "event_id" => Ecto.UUID.generate(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_dispatcher",
+      "payload" => task_payload
+    }
 
-      BotArmyRuntime.NATS.Publisher.publish("bridge.task.create", envelope)
-    rescue
-      _ -> :ok
-    end
+    BotArmyRuntime.NATS.Publisher.publish("bridge.task.create", envelope)
+  rescue
+    _ -> :ok
   end
 end
