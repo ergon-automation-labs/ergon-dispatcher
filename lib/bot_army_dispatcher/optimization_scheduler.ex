@@ -191,7 +191,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
             :error
         end
 
-      :error ->
+      {:error, _} ->
         :error
     end
   end
