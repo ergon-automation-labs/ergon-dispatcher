@@ -165,7 +165,9 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
     # Extract JSON array from response (LLM may include extra text)
     case extract_json_array(response_text) do
       {:ok, proposals} ->
-        Enum.filter_map(proposals, &valid_proposal?/1, &parse_proposal_item/1)
+        proposals
+        |> Enum.filter(&valid_proposal?/1)
+        |> Enum.map(&parse_proposal_item/1)
 
       _ ->
         []
