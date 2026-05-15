@@ -134,11 +134,26 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
     case BotArmyRuntime.NATS.Publisher.publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[AgentDispatchHandler] AI dispatch succeeded: event_id=#{context.event_id}")
+
+        BotArmyLearning.OutcomeTracker.record(
+          context.event_id,
+          "dispatcher.ai_dispatch",
+          "dispatch",
+          "success"
+        )
+
         :ok
 
       {:error, reason} ->
         Logger.error(
           "[AgentDispatchHandler] AI dispatch failed: event_id=#{context.event_id} reason=#{inspect(reason)}"
+        )
+
+        BotArmyLearning.OutcomeTracker.record(
+          context.event_id,
+          "dispatcher.ai_dispatch",
+          "dispatch",
+          "failure"
         )
 
         {:error, reason}
@@ -173,11 +188,25 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           "[AgentDispatchHandler] Human escalation task created: event_id=#{context.event_id}"
         )
 
+        BotArmyLearning.OutcomeTracker.record(
+          context.event_id,
+          "dispatcher.ai_dispatch",
+          "escalate",
+          "success"
+        )
+
         :ok
 
       {:error, reason} ->
         Logger.error(
           "[AgentDispatchHandler] Human escalation failed: event_id=#{context.event_id} reason=#{inspect(reason)}"
+        )
+
+        BotArmyLearning.OutcomeTracker.record(
+          context.event_id,
+          "dispatcher.ai_dispatch",
+          "escalate",
+          "failure"
         )
 
         {:error, reason}
