@@ -8,7 +8,7 @@ defmodule BotArmyDispatcher.Application do
 
   use Application
 
-  @env Mix.env()
+  defp env, do: String.to_atom(System.get_env("MIX_ENV") || "prod")
 
   @impl true
   def start(_type, _args) do
@@ -29,45 +29,47 @@ defmodule BotArmyDispatcher.Application do
   end
 
   defp maybe_add_repo(children) do
-    if @env == :test, do: children, else: [{BotArmyDispatcher.Repo, []} | children]
+    if env() == :test, do: children, else: [{BotArmyDispatcher.Repo, []} | children]
   end
 
   defp maybe_add_health_observer(children) do
-    if @env == :test, do: children, else: [{BotArmyDispatcher.HealthObserver, []} | children]
+    if env() == :test, do: children, else: [{BotArmyDispatcher.HealthObserver, []} | children]
   end
 
   defp maybe_add_intent_evaluator(children) do
-    if @env == :test,
+    if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.IntentEvaluator, []} | children]
   end
 
   defp maybe_add_pulse_publisher(children) do
-    if @env == :test, do: children, else: [{BotArmyDispatcher.PulsePublisher, []} | children]
+    if env() == :test, do: children, else: [{BotArmyDispatcher.PulsePublisher, []} | children]
   end
 
   defp maybe_add_consumer(children) do
-    if @env == :test, do: children, else: [{BotArmyDispatcher.NATS.Consumer, []} | children]
+    if env() == :test, do: children, else: [{BotArmyDispatcher.NATS.Consumer, []} | children]
   end
 
   defp maybe_add_incident_responder(children) do
-    if @env == :test,
+    if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.Handlers.IncidentResponder, []} | children]
   end
 
   defp maybe_add_outcome_tracker(children) do
-    if @env == :test, do: children, else: [{BotArmyLearning.OutcomeTracker, []} | children]
+    if env() == :test,
+      do: children,
+      else: [{BotArmyLearning.OutcomeTracker, [name: :dispatcher_outcome_tracker]} | children]
   end
 
   defp maybe_add_optimization_scheduler(children) do
-    if @env == :test,
+    if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.OptimizationScheduler, []} | children]
   end
 
   defp maybe_add_learning(children) do
-    if @env == :test,
+    if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.Learning, []} | children]
   end
