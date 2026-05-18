@@ -12,10 +12,13 @@ defmodule BotArmyDispatcher.Release do
   def migrate do
     load_app()
 
-    # Both BotArmyDispatcher.Repo and BotArmyLearning.Repo use the same database,
-    # so we only run migrations via BotArmyDispatcher.Repo which has the migrations
-    {:ok, _, _} =
-      Ecto.Migrator.with_repo(BotArmyDispatcher.Repo, &Ecto.Migrator.run(&1, :up, all: true))
+    for repo <- repos() do
+      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+    end
+  end
+
+  defp repos do
+    Application.fetch_env!(@app, :ecto_repos)
   end
 
   defp load_app do

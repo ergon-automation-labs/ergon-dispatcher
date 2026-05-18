@@ -1,6 +1,6 @@
 import Config
 
-config :bot_army_dispatcher, ecto_repos: [BotArmyDispatcher.Repo, BotArmyLearning.Repo]
+config :bot_army_dispatcher, ecto_repos: [BotArmyDispatcher.Repo]
 
 config :bot_army_dispatcher, BotArmyDispatcher.Repo,
   database: "bot_army_dispatcher",
