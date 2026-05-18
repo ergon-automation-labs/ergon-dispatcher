@@ -11,10 +11,16 @@ defmodule BotArmyDispatcher.Release do
 
   def migrate do
     load_app()
+    IO.puts("DEBUG: Starting migrations for repos: #{inspect(repos())}")
 
     for repo <- repos() do
-      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+      IO.puts("DEBUG: Running migrations for #{inspect(repo)}")
+      result = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+      IO.puts("DEBUG: Migration result: #{inspect(result)}")
+      {:ok, _, _} = result
     end
+
+    IO.puts("DEBUG: All migrations complete")
   end
 
   defp repos do
