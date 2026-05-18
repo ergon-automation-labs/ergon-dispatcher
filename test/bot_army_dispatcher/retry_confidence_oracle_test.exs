@@ -1,6 +1,7 @@
 defmodule BotArmyDispatcher.RetryConfidenceOracleTest do
   use ExUnit.Case
   @moduletag :core
+  @moduletag :nats_live
 
   alias BotArmyDispatcher.RetryConfidenceOracle
 
