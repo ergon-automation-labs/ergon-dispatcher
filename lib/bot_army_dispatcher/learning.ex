@@ -158,31 +158,56 @@ defmodule BotArmyDispatcher.Learning do
     success_rate = Map.get(metadata, :success_rate, 1.0)
     execution_time = Map.get(metadata, :execution_time_ms, 0)
 
-    pattern = %{
-      "signature" => signature,
-      "goal_text" => goal,
-      "goal_signature" => signature,
-      "subtasks" => decomposition,
-      "executions" => 1,
-      "successes" => 1,
-      "failures" => 0,
-      "success_rate" => success_rate,
-      "confidence" => calculate_confidence(1, 1),
-      "total_execution_time_ms" => execution_time,
-      "created_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "last_used_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }
+    patterns = Map.get(state, "patterns", %{})
+    sig_map = Map.get(state, "signature_map", %{})
+
+    # Merge with existing pattern if it exists
+    pattern =
+      case Map.get(patterns, signature) do
+        nil ->
+          # New pattern: track success/failure based on success_rate
+          {successes, failures} =
+            if success_rate >= 1.0, do: {1, 0}, else: {0, 1}
+
+          %{
+            "signature" => signature,
+            "goal_text" => goal,
+            "goal_signature" => signature,
+            "subtasks" => decomposition,
+            "executions" => 1,
+            "successes" => successes,
+            "failures" => failures,
+            "success_rate" => success_rate,
+            "confidence" => calculate_confidence(successes, 1),
+            "total_execution_time_ms" => execution_time,
+            "created_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+            "last_used_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+
+        existing ->
+          # Merge with existing: increment executions, track successes
+          new_executions = existing["executions"] + 1
+          new_successes = existing["successes"] + if success_rate >= 1.0, do: 1, else: 0
+          new_failures = existing["failures"] + if success_rate < 1.0, do: 1, else: 0
+          new_total_time = existing["total_execution_time_ms"] + execution_time
+
+          existing
+          |> Map.put("executions", new_executions)
+          |> Map.put("successes", new_successes)
+          |> Map.put("failures", new_failures)
+          |> Map.put("success_rate", success_rate)
+          |> Map.put("confidence", calculate_confidence(new_successes, new_executions))
+          |> Map.put("total_execution_time_ms", new_total_time)
+          |> Map.put("last_used_at", DateTime.utc_now() |> DateTime.to_iso8601())
+      end
 
     Logger.info("[Learning] Recording pattern",
       signature: signature,
       goal: String.slice(goal, 0, 50),
-      success_rate: success_rate
+      success_rate: success_rate,
+      executions: pattern["executions"]
     )
 
-    patterns = Map.get(state, "patterns", %{})
-    sig_map = Map.get(state, "signature_map", %{})
-
-    # Store by signature (primary key) and by goal keywords (for matching)
     new_patterns = Map.put(patterns, signature, pattern)
     new_sig_map = Map.put(sig_map, signature, goal)
 
@@ -314,7 +339,7 @@ defmodule BotArmyDispatcher.Learning do
 
     case best do
       {_sig, pattern, similarity} ->
-        if similarity > 0.5 and pattern["confidence"] >= @default_confidence_threshold do
+        if similarity >= 0.5 and pattern["confidence"] >= @default_confidence_threshold do
           Logger.debug("[Learning] Found semantic match",
             similarity: similarity,
             confidence: pattern["confidence"]
@@ -344,12 +369,14 @@ defmodule BotArmyDispatcher.Learning do
   end
 
   defp calculate_confidence(successes, total_executions) when total_executions > 0 do
-    base = successes / total_executions
+    success_ratio = successes / total_executions
 
-    # Confidence increases with more data: 1 exec at 100% = 0.5, but 10 execs at 100% = 0.95
-    data_bonus = min(total_executions / 10, 0.4)
+    # Confidence curve: 1 exec at 100% = 0.6, 10 execs at 100% = 0.95
+    # Formula: 0.6 + 0.039 * (executions - 1), then multiplied by success ratio
+    base_confidence = 0.6 + 0.039 * (total_executions - 1)
 
-    min(base + data_bonus * base, 1.0)
+    # Cap at 0.99 to maintain epistemic humility (never claim certainty)
+    min(success_ratio * base_confidence, 0.99)
   end
 
   defp calculate_confidence(_successes, 0), do: 0.0
