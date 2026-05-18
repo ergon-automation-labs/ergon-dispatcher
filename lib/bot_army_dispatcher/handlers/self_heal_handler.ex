@@ -188,7 +188,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
             "Intent ID: #{intent_id}",
         "context" => "inbox",
         "priority" => "high",
-        "labels" => ["dispatcher", "self_heal", "escalation"]
+        "labels" => ["dispatcher", "self_heal", "escalation", "factory:proposal"]
       }
     }
 

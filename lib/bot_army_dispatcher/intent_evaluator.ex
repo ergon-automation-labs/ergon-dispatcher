@@ -17,6 +17,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   require Logger
 
   @eval_interval_ms 30 * 1000
+  @obs_confidence_evaluated "events.dispatcher.confidence.evaluated"
 
   @thresholds %{
     "bot_stale_count" => %{min: 1, weight: 0.6},
@@ -78,10 +79,12 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   end
 
   defp evaluate_with_confidence(bot_name, context, oracle_result, cache) do
-    %{decision: decision, signals: signals} = oracle_result
+    %{decision: decision, signals: signals, confidence: confidence} = oracle_result
 
     # Cache the result
     new_cache = Map.put(cache, bot_name, oracle_result)
+
+    _ = emit_confidence_evaluated(bot_name, confidence, decision, signals)
 
     case decision do
       :skip ->
@@ -125,6 +128,22 @@ defmodule BotArmyDispatcher.IntentEvaluator do
       {:error, reason} ->
         Logger.warning("[IntentEvaluator] Failed to evaluate #{bot_name}: #{inspect(reason)}")
         cache
+    end
+  end
+
+  defp emit_confidence_evaluated(bot_name, confidence, decision, signals) do
+    payload = %{
+      "bot_name" => bot_name,
+      "confidence" => confidence,
+      "decision" => Atom.to_string(decision),
+      "signals" => signals
+    }
+
+    BotArmyRuntime.NATS.Publisher.publish(@obs_confidence_evaluated, payload)
+    |> case do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      {:error, _reason} -> :ok
     end
   end
 
