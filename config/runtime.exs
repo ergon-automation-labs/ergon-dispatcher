@@ -20,7 +20,8 @@ config :bot_army_learning, BotArmyLearning.Repo,
   port: String.to_integer(System.get_env("DATABASE_PORT") || "30003"),
   username: System.get_env("DATABASE_USER") || "postgres",
   password: System.get_env("DATABASE_PASSWORD") || "postgres",
-  pool_size: 3
+  pool_size: 3,
+  migrations_paths: ["priv/repo/migrations"]
 
 config :bot_army_dispatcher,
   factory_fixer_routing_enabled:
