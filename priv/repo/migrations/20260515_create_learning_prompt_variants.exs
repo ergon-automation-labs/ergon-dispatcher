@@ -1,4 +1,4 @@
-defmodule BotArmyLearning.Repo.Migrations.CreateLearningPromptVariants do
+defmodule BotArmyDispatcher.Repo.Migrations.CreateLearningPromptVariants do
   use Ecto.Migration
 
   def change do

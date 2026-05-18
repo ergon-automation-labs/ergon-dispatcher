@@ -1,4 +1,4 @@
-defmodule BotArmyLearning.Repo.Migrations.CreateLearningOutcomes do
+defmodule BotArmyDispatcher.Repo.Migrations.CreateLearningOutcomes do
   use Ecto.Migration
 
   def change do
