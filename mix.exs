@@ -10,7 +10,10 @@ defmodule BotArmyDispatcher.MixProject do
       deps: deps(),
       releases: [
         dispatcher_bot: [
-          applications: [bot_army_dispatcher: :permanent]
+          applications: [bot_army_dispatcher: :permanent],
+          include_erts: true,
+          strip_beams: true,
+          copy_priv: true
         ]
       ],
       dialyzer: [
