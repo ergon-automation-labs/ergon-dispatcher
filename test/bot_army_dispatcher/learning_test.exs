@@ -36,7 +36,7 @@ defmodule BotArmyDispatcher.LearningTest do
       ]
 
       metadata = %{
-        execution_time_ms: 45000,
+        execution_time_ms: 45_000,
         success_rate: 1.0,
         successful_subtasks: 2,
         failed_subtasks: 0
@@ -69,7 +69,7 @@ defmodule BotArmyDispatcher.LearningTest do
       Enum.each(goals, fn goal ->
         Learning.record_success(goal, decomposition, %{
           success_rate: 1.0,
-          execution_time_ms: 10000
+          execution_time_ms: 10_000
         })
       end)
 
