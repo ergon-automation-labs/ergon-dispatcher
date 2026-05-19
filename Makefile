@@ -1,7 +1,7 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 
-.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish dispatch-test
+.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release publish-release-force setup-hooks setup-db reset-db logs push-and-publish dispatch-test
 
 help:
 	@echo "Dispatcher Bot"
@@ -104,6 +104,47 @@ publish-release: release
 	@echo "==============================================="
 	@echo ""
 
+	@set -e; \
+	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then \
+		echo "Failed to resolve version from mix.exs"; \
+		exit 1; \
+	fi; \
+	TARBALL="dispatcher_bot-$$VERSION.tar.gz"; \
+	echo "Version: $$VERSION"; \
+	echo "Creating release tarball..."; \
+	tar -czf "$$TARBALL" -C _build/prod/rel dispatcher_bot/; \
+	echo "✓ Tarball created: $$TARBALL"; \
+	echo ""; \
+	echo "Creating GitHub release v$$VERSION..."; \
+	if gh release view "v$$VERSION" >/dev/null 2>&1; then \
+		gh release upload "v$$VERSION" "$$TARBALL" --clobber; \
+	else \
+		gh release create "v$$VERSION" "$$TARBALL" \
+			--title "Release v$$VERSION" \
+			--notes "Dispatcher Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
+			--draft=false; \
+	fi; \
+	echo "✓ Release published to GitHub"; \
+	echo ""; \
+	echo "Next steps:"; \
+	echo "1. Jenkins will automatically detect the new release"; \
+	echo "2. Trigger deployment in Jenkins UI or wait for auto-deployment"; \
+	echo "3. Check deployment status: make jenkins-logs"
+
+publish-release-force:
+	@echo "==============================================="
+	@echo "Building OTP release (skipping tests)"
+	@echo "==============================================="
+	rm -rf _build/prod/rel/dispatcher_bot
+	MIX_ENV=prod $(MIX) release
+	@echo ""
+	@echo "✓ Release built successfully"
+	@echo ""
+	@echo "==============================================="
+	@echo "Publishing release to GitHub"
+	@echo "==============================================="
+	@echo ""
 	@set -e; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
