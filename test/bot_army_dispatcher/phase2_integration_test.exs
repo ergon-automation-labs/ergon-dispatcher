@@ -8,7 +8,11 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
   alias BotArmyDispatcher.{Orchestrator, Learning}
 
   setup do
-    {:ok, _pid} = start_supervised({Learning, [name: Learning]})
+    case start_supervised({Learning, [name: Learning]}) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
+
     on_exit(fn -> Learning.clear() end)
     :ok
   end
@@ -33,10 +37,11 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
       }
     ]
 
-    {:ok, outcome} = Orchestrator.execute(subtasks,
-      decomposition_id: "phase2-test-1",
-      publisher_module: __MODULE__.TestPublisher
-    )
+    {:ok, outcome} =
+      Orchestrator.execute(subtasks,
+        decomposition_id: "phase2-test-1",
+        publisher_module: __MODULE__.TestPublisher
+      )
 
     assert outcome["status"] in ["completed", "partially_completed"]
     assert outcome["total_count"] == 2
@@ -51,6 +56,7 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
 
   test "phase 2: learning tracks execution growth and confidence" do
     goal = "analyze company data"
+
     subtasks = [
       %{
         "order" => 1,
@@ -98,10 +104,11 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
       }
     ]
 
-    {:ok, outcome} = Orchestrator.execute(subtasks,
-      decomposition_id: "phase2-routing-test",
-      publisher_module: __MODULE__.CapturingPublisher
-    )
+    {:ok, outcome} =
+      Orchestrator.execute(subtasks,
+        decomposition_id: "phase2-routing-test",
+        publisher_module: __MODULE__.CapturingPublisher
+      )
 
     assert outcome["total_count"] == 2
 
@@ -114,6 +121,7 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
 
   test "phase 2: learning handles mixed success/failure rates" do
     goal = "process data"
+
     subtasks = [
       %{
         "order" => 1,
@@ -151,6 +159,7 @@ defmodule BotArmyDispatcher.Phase2IntegrationTest do
       if :ets.info(@table) == :undefined do
         :ets.new(@table, [:named_table, :public, :bag])
       end
+
       :ets.insert(@table, {subject, payload})
       {:ok, subject}
     end

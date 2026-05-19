@@ -91,7 +91,7 @@ release: check
 	@echo "==============================================="
 	@echo "Building OTP release"
 	@echo "==============================================="
-	rm -rf _build/prod/rel/dispatcher_bot
+	rm -rf _build/prod
 	MIX_ENV=prod $(MIX) release
 	@echo ""
 	@echo "✓ Release built successfully"
@@ -136,7 +136,7 @@ publish-release-force:
 	@echo "==============================================="
 	@echo "Building OTP release (skipping tests)"
 	@echo "==============================================="
-	rm -rf _build/prod/rel/dispatcher_bot
+	rm -rf _build/prod
 	MIX_ENV=prod $(MIX) release
 	@echo ""
 	@echo "✓ Release built successfully"

@@ -5,7 +5,10 @@ defmodule BotArmyDispatcher.LearningTest do
   alias BotArmyDispatcher.Learning
 
   setup do
-    {:ok, _pid} = start_supervised({Learning, [name: Learning]})
+    case start_supervised({Learning, [name: Learning]}) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
 
     on_exit(fn ->
       Learning.clear()
