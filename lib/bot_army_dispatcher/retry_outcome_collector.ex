@@ -44,11 +44,8 @@ defmodule BotArmyDispatcher.RetryOutcomeCollector do
   @doc "Get all circuit_breaker_keys with recorded outcomes."
   @spec all_keys() :: [String.t()]
   def all_keys do
-    :ets.select(:retry_outcomes, [
-      {:"$1", :_, :_},
-      [],
-      [:"$1"]
-    ])
+    :ets.match(:retry_outcomes, {:"$1", :_})
+    |> Enum.map(&List.first/1)
   end
 
   # ============================================================================
