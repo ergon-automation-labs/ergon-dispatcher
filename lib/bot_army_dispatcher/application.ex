@@ -23,6 +23,8 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_outcome_tracker()
       |> maybe_add_optimization_scheduler()
       |> maybe_add_learning()
+      |> maybe_add_retry_outcome_collector()
+      |> maybe_add_retry_learning()
 
     opts = [strategy: :one_for_one, name: BotArmyDispatcher.Supervisor]
     Supervisor.start_link(children, opts)
@@ -72,5 +74,17 @@ defmodule BotArmyDispatcher.Application do
     if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.Learning, []} | children]
+  end
+
+  defp maybe_add_retry_outcome_collector(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.RetryOutcomeCollector, []} | children]
+  end
+
+  defp maybe_add_retry_learning(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.RetryLearning, []} | children]
   end
 end
