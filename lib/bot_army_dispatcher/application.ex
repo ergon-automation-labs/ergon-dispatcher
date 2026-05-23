@@ -61,7 +61,11 @@ defmodule BotArmyDispatcher.Application do
   defp maybe_add_outcome_tracker(children) do
     if env() == :test,
       do: children,
-      else: [{BotArmyLearning.OutcomeTracker, [name: :dispatcher_outcome_tracker]} | children]
+      else: [
+        {BotArmyLearning.OutcomeTracker,
+         [name: :dispatcher_outcome_tracker, repo: BotArmyDispatcher.Repo]}
+        | children
+      ]
   end
 
   defp maybe_add_optimization_scheduler(children) do
