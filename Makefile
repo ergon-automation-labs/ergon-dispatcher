@@ -66,7 +66,10 @@ deps:
 	$(MIX) deps.get
 
 test:
-	$(MIX) test
+	@echo "Running test suite (8 test files)..."
+	@echo "Expected: 1-2 minutes"
+	@echo ""
+	@time $(MIX) test
 
 credo:
 	$(MIX) credo
@@ -103,20 +106,14 @@ publish-release: release
 	@echo "Publishing release to GitHub"
 	@echo "==============================================="
 	@echo ""
-
-	@set -e; \
-	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
-	if [ -z "$$VERSION" ]; then \
-		echo "Failed to resolve version from mix.exs"; \
-		exit 1; \
-	fi; \
+	@bash -c 'set -e; \
+	VERSION=$$(sed -n "s/^[[:space:]]*version:[[:space:]]*\"\([^\"]*\)\".*/\1/p" mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then echo "Failed to resolve version from mix.exs"; exit 1; fi; \
 	TARBALL="dispatcher_bot-$$VERSION.tar.gz"; \
-	echo "Version: $$VERSION"; \
-	echo "Creating release tarball..."; \
+	echo "[1/3] Version: $$VERSION"; \
+	echo "[2/3] Creating tarball ($$TARBALL)..."; \
 	tar -czf "$$TARBALL" -C _build/prod/rel dispatcher_bot/; \
-	echo "✓ Tarball created: $$TARBALL"; \
-	echo ""; \
-	echo "Creating GitHub release v$$VERSION..."; \
+	echo "[3/3] Publishing to GitHub..."; \
 	if gh release view "v$$VERSION" >/dev/null 2>&1; then \
 		gh release upload "v$$VERSION" "$$TARBALL" --clobber; \
 	else \
@@ -125,12 +122,10 @@ publish-release: release
 			--notes "Dispatcher Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
 			--draft=false; \
 	fi; \
-	echo "✓ Release published to GitHub"; \
 	echo ""; \
-	echo "Next steps:"; \
-	echo "1. Jenkins will automatically detect the new release"; \
-	echo "2. Trigger deployment in Jenkins UI or wait for auto-deployment"; \
-	echo "3. Check deployment status: make jenkins-logs"
+	echo "✓ Release v$$VERSION published successfully"; \
+	echo "Timeline: test (~1-2min) → build release (~1min) → publish (~1min)"; \
+	echo ""'
 
 publish-release-force:
 	@echo "==============================================="
