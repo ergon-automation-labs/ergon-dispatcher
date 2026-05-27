@@ -67,7 +67,8 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           intent_id,
           "dispatcher.heal",
           "act",
-          "success"
+          "success",
+          :dispatcher_outcome_tracker
         )
 
         publish_audit_event(target_bot, intent_id, :dispatched)
@@ -80,7 +81,8 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           intent_id,
           "dispatcher.heal",
           "act",
-          "failure"
+          "failure",
+          :dispatcher_outcome_tracker
         )
 
         case BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{

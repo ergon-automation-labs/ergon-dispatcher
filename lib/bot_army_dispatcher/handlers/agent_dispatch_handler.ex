@@ -139,7 +139,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           context.event_id,
           "dispatcher.ai_dispatch",
           "dispatch",
-          "success"
+          "success",
+          :dispatcher_outcome_tracker
         )
 
         :ok
@@ -153,7 +154,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           context.event_id,
           "dispatcher.ai_dispatch",
           "dispatch",
-          "failure"
+          "failure",
+          :dispatcher_outcome_tracker
         )
 
         {:error, reason}
@@ -192,7 +194,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           context.event_id,
           "dispatcher.ai_dispatch",
           "escalate",
-          "success"
+          "success",
+          :dispatcher_outcome_tracker
         )
 
         :ok
@@ -206,7 +209,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           context.event_id,
           "dispatcher.ai_dispatch",
           "escalate",
-          "failure"
+          "failure",
+          :dispatcher_outcome_tracker
         )
 
         {:error, reason}

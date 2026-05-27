@@ -74,7 +74,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
 
   defp collect_stats do
     Enum.map(@known_categories, fn category ->
-      stats = BotArmyLearning.OutcomeTracker.stats(category)
+      stats = BotArmyLearning.OutcomeTracker.stats(category, :dispatcher_outcome_tracker)
       {category, stats}
     end)
     |> Map.new()
