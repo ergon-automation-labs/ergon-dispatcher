@@ -57,7 +57,11 @@ defmodule BotArmyDispatcher.NATS.Consumer do
         Logger.info("[DispatcherConsumer] Connected to NATS, subscribing to topics")
 
         subscriptions = setup_subscriptions(conn)
-        BotArmyRuntime.Registry.register("dispatcher", @subjects, @version)
+
+        deployment_status =
+          Application.get_env(:bot_army_dispatcher, :deployment_status, "deployed")
+
+        Registry.register("dispatcher", @subjects, @version, deployment_status)
         Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
@@ -126,7 +130,10 @@ defmodule BotArmyDispatcher.NATS.Consumer do
   @impl true
   def handle_info(:registry_heartbeat, state) do
     if state.subscriptions != [] do
-      BotArmyRuntime.Registry.register("dispatcher", @subjects, @version)
+      deployment_status =
+        Application.get_env(:bot_army_dispatcher, :deployment_status, "deployed")
+
+      Registry.register("dispatcher", @subjects, @version, deployment_status)
       Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
     end
 

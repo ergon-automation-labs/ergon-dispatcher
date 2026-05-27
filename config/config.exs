@@ -1,4 +1,5 @@
 import Config
+config :bot_army_dispatcher, :deployment_status, "deployed"
 
 config :bot_army_dispatcher, ecto_repos: [BotArmyDispatcher.Repo]
 
