@@ -77,8 +77,16 @@ defmodule BotArmyDispatcher.SystemObserver do
       # Keep rolling history (last 10 digests for pattern detection)
       history = [digest | state.digest_history] |> Enum.take(10)
 
-      publish_digest(digest)
-      write_to_para(digest)
+      # Compute observations from patterns in history
+      digest_with_observations =
+        digest
+        |> Map.put(
+          "observations",
+          compute_observations_from_history(digest, history)
+        )
+
+      publish_digest(digest_with_observations)
+      write_to_para(digest_with_observations)
 
       # Detect anomalies and alert if needed
       detect_and_alert_anomalies(state.previous_digest, digest)
@@ -105,8 +113,7 @@ defmodule BotArmyDispatcher.SystemObserver do
       "test_signal_age_hours" => get_test_signal_age(),
       "credo_violations" => credo,
       "ready_to_deploy" => ready,
-      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready),
-      "observations" => compute_observations(blockers)
+      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready)
     }
   end
 
@@ -204,18 +211,124 @@ defmodule BotArmyDispatcher.SystemObserver do
     _ -> false
   end
 
-  defp compute_observations(blockers) do
-    # Observations from learned patterns and trends
-    # (enhanced version will track digest history and compute trend analysis)
-    case length(blockers) do
-      0 ->
-        ["No blockers — team is unblocked"]
+  defp compute_observations_from_history(current, history) do
+    observations = []
 
-      n when n > 5 ->
-        ["Persistent blocker load: #{n} tasks awaiting decisions"]
+    # Blocker trends
+    observations = observations ++ detect_blocker_trends(current, history)
 
-      _ ->
+    # Code quality trends
+    observations = observations ++ detect_code_quality_trends(current, history)
+
+    # Recurring problem bots
+    observations = observations ++ detect_recurring_issues(current, history)
+
+    # Anomalies
+    observations = observations ++ detect_anomalies(current, history)
+
+    Enum.uniq(observations)
+  end
+
+  defp detect_blocker_trends(current, history) do
+    if Enum.empty?(history) do
+      []
+    else
+      current_count = length(Map.get(current, "blockers", []))
+
+      prev_counts =
+        Enum.take(history, 2) |> Enum.map(fn d -> length(Map.get(d, "blockers", [])) end)
+
+      case prev_counts do
+        [prev | _] ->
+          cond do
+            current_count > prev + 3 ->
+              ["📈 Blocker surge: #{prev} → #{current_count}"]
+
+            current_count < prev - 2 and current_count > 0 ->
+              ["📉 Blockers reducing: #{prev} → #{current_count}"]
+
+            current_count > 8 ->
+              ["⚠️  High blocker load sustained"]
+
+            true ->
+              []
+          end
+
+        _ ->
+          []
+      end
+    end
+  end
+
+  defp detect_code_quality_trends(current, history) do
+    if Enum.empty?(history) do
+      []
+    else
+      current_credo = Map.get(current, "credo_violations", %{})
+      current_total = Enum.reduce(current_credo, 0, fn {_bot, count}, acc -> acc + count end)
+
+      prev_digest = List.first(history)
+      prev_credo = Map.get(prev_digest || %{}, "credo_violations", %{})
+      prev_total = Enum.reduce(prev_credo, 0, fn {_bot, count}, acc -> acc + count end)
+
+      cond do
+        current_total > prev_total + 5 ->
+          ["📈 Code quality degrading: #{prev_total} → #{current_total} violations"]
+
+        current_total < prev_total - 3 and current_total > 0 ->
+          ["📉 Code quality improving: #{prev_total} → #{current_total} violations"]
+
+        Enum.any?(current_credo, fn {_bot, count} -> count > 20 end) ->
+          worst = Enum.max_by(current_credo, fn {_bot, count} -> count end)
+          {bot, count} = worst
+          ["⚠️  Code quality at risk in #{bot} (#{count} violations)"]
+
+        true ->
+          []
+      end
+    end
+  end
+
+  defp detect_recurring_issues(current, history) do
+    if length(history) < 3 do
+      []
+    else
+      unhealthy_counts =
+        Enum.take(history, 5)
+        |> Enum.reduce(%{}, fn digest, acc ->
+          Enum.reduce(Map.get(digest, "unhealthy_bots", []), acc, fn bot, counts ->
+            Map.update(counts, bot, 1, &(&1 + 1))
+          end)
+        end)
+
+      frequent_issues =
+        unhealthy_counts
+        |> Enum.filter(fn {_bot, count} -> count >= 3 end)
+        |> Enum.map(fn {bot, count} -> "#{bot}" end)
+
+      if not Enum.empty?(frequent_issues) do
+        ["🔴 Recurring issues: #{Enum.join(frequent_issues, ", ")} unhealthy in 3+ recent cycles"]
+      else
         []
+      end
+    end
+  end
+
+  defp detect_anomalies(current, history) do
+    if Enum.empty?(history) do
+      []
+    else
+      prev_digest = List.first(history)
+      prev_unhealthy = MapSet.new(Map.get(prev_digest, "unhealthy_bots", []))
+      curr_unhealthy = MapSet.new(Map.get(current, "unhealthy_bots", []))
+      new_unhealthy = MapSet.difference(curr_unhealthy, prev_unhealthy)
+
+      if MapSet.size(new_unhealthy) > 0 do
+        new_list = new_unhealthy |> MapSet.to_list() |> Enum.join(", ")
+        ["🚨 Anomaly: New unhealthy bot(s) detected: #{new_list}"]
+      else
+        []
+      end
     end
   end
 
