@@ -147,7 +147,9 @@ defmodule BotArmyDispatcher.NATS.Consumer do
 
   defp dispatch_message(%{topic: "dispatcher.system.health.digest.query"} = msg) do
     # Request/reply handler for system health digest queries
+    Logger.info("[DispatcherConsumer] Received digest query request")
     reply = Map.get(msg, :reply_to)
+    Logger.info("[DispatcherConsumer] Reply-to: #{inspect(reply)}")
 
     if reply do
       latest = GenServer.call(BotArmyDispatcher.SystemObserver, :get_latest_digest, 5000)
@@ -187,15 +189,25 @@ defmodule BotArmyDispatcher.NATS.Consumer do
     end
   end
 
-  defp dispatch_message(%{topic: topic, body: body}) do
-    case BotArmyCore.NATS.Decoder.decode(body) do
-      {:ok, decoded_message} ->
-        BotArmyDispatcher.Handlers.AgentDispatchHandler.handle(decoded_message, topic)
+  defp dispatch_message(msg) do
+    Logger.debug(
+      "[DispatcherConsumer] Unhandled message: topic=#{msg[:topic]}, has_body=#{Map.has_key?(msg, :body)}, has_reply_to=#{Map.has_key?(msg, :reply_to)}"
+    )
 
-      {:error, reason} ->
-        Logger.warning(
-          "[DispatcherConsumer] Failed to decode message from #{topic}: #{inspect(reason)}"
-        )
+    case msg do
+      %{topic: topic, body: body} ->
+        case BotArmyCore.NATS.Decoder.decode(body) do
+          {:ok, decoded_message} ->
+            BotArmyDispatcher.Handlers.AgentDispatchHandler.handle(decoded_message, topic)
+
+          {:error, reason} ->
+            Logger.warning(
+              "[DispatcherConsumer] Failed to decode message from #{topic}: #{inspect(reason)}"
+            )
+        end
+
+      _ ->
+        Logger.debug("[DispatcherConsumer] Message does not match any handler: #{inspect(msg)}")
     end
   end
 end
