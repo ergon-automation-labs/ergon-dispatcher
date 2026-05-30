@@ -33,6 +33,11 @@ defmodule BotArmyDispatcher.SystemObserver do
     GenServer.cast(__MODULE__, :analyze_now)
   end
 
+  @doc "Get the latest computed digest."
+  def get_latest_digest do
+    GenServer.call(__MODULE__, :get_latest_digest)
+  end
+
   @impl true
   def init(opts) do
     interval = Keyword.get(opts, :interval_ms, @default_interval_ms)
@@ -54,6 +59,11 @@ defmodule BotArmyDispatcher.SystemObserver do
     {:noreply, new_state}
   end
 
+  @impl true
+  def handle_call(:get_latest_digest, _from, state) do
+    {:reply, state[:previous_digest], state}
+  end
+
   defp schedule_analysis(interval) do
     Process.send_after(self(), :run_analysis, interval)
   end
@@ -65,7 +75,6 @@ defmodule BotArmyDispatcher.SystemObserver do
       digest = synthesize_digest()
       publish_digest(digest)
       write_to_para(digest)
-      write_local_copy(digest)
 
       # Detect anomalies and alert if needed
       detect_and_alert_anomalies(state.previous_digest, digest)
@@ -238,20 +247,6 @@ defmodule BotArmyDispatcher.SystemObserver do
 
       {:error, e} ->
         Logger.warning("[SystemObserver] Failed to write to PARA: #{inspect(e)}")
-    end
-  end
-
-  defp write_local_copy(digest) do
-    # Write local copy for Claude Code session startup briefing
-    content = format_digest_for_para(digest)
-    local_path = Path.expand("~/.claude/system_digest.md")
-
-    case File.write(local_path, content) do
-      :ok ->
-        Logger.info("[SystemObserver] Wrote digest to local: #{local_path}")
-
-      {:error, e} ->
-        Logger.warning("[SystemObserver] Failed to write local digest: #{inspect(e)}")
     end
   end
 

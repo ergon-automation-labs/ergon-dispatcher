@@ -35,7 +35,12 @@ defmodule BotArmyDispatcher.NATS.Consumer do
       description: "Bot recovery events"
     },
     %{subject: "system.health", type: :subscribe, description: "System health signals"},
-    %{subject: "bridge.incident.>", type: :request_reply, description: "Incident bridge API"}
+    %{subject: "bridge.incident.>", type: :request_reply, description: "Incident bridge API"},
+    %{
+      subject: "dispatcher.system.health.digest.query",
+      type: :request_reply,
+      description: "Query latest system health digest"
+    }
   ]
 
   def start_link(opts) do
@@ -45,7 +50,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
   @impl true
   def init(opts) do
     Logger.info("[DispatcherConsumer] Starting NATS consumer")
-    state = %{subscriptions: [], conn: nil, opts: opts}
+    state = %{subscriptions: [], conn: nil, opts: opts, latest_digest: nil}
     {:ok, state, {:continue, :connect}}
   end
 
@@ -138,6 +143,29 @@ defmodule BotArmyDispatcher.NATS.Consumer do
     end
 
     {:noreply, state}
+  end
+
+  defp dispatch_message(%{topic: "dispatcher.system.health.digest.query", reply_to: reply} = msg) do
+    # Request/reply handler for system health digest queries
+    latest = GenServer.call(BotArmyDispatcher.SystemObserver, :get_latest_digest, 5000)
+
+    response =
+      if latest do
+        BotArmyRuntime.NATS.Reply.ok(latest)
+      else
+        BotArmyRuntime.NATS.Reply.error("No digest available yet", "no_digest")
+      end
+
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+      {:ok, conn} ->
+        Gnat.pub(conn, reply, Jason.encode!(response))
+
+      {:error, _} ->
+        Logger.warning("[DispatcherConsumer] Failed to respond to digest query")
+    end
+  rescue
+    e ->
+      Logger.error("[DispatcherConsumer] Error handling digest query: #{inspect(e)}")
   end
 
   defp dispatch_message(%{topic: "factory.fixer.request", body: body} = msg) do
