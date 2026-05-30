@@ -89,14 +89,19 @@ defmodule BotArmyDispatcher.SystemObserver do
   end
 
   defp synthesize_digest do
+    blockers = collect_blockers()
+    unhealthy = collect_unhealthy_bots()
+    credo = collect_credo_violations()
+    ready = collect_ready_to_deploy()
+
     %{
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "blockers" => collect_blockers(),
-      "unhealthy_bots" => collect_unhealthy_bots(),
+      "blockers" => blockers,
+      "unhealthy_bots" => unhealthy,
       "test_signal_age_hours" => get_test_signal_age(),
-      "credo_violations" => collect_credo_violations(),
-      "ready_to_deploy" => collect_ready_to_deploy(),
-      "suggested_focus" => compute_suggested_focus()
+      "credo_violations" => credo,
+      "ready_to_deploy" => ready,
+      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready)
     }
   end
 
@@ -194,9 +199,31 @@ defmodule BotArmyDispatcher.SystemObserver do
     _ -> false
   end
 
-  defp compute_suggested_focus do
-    # Simple heuristic: blockers > code quality > deployments
-    "Analyze blockers and unblock highest-priority tasks"
+  defp compute_suggested_focus(blockers, unhealthy, credo, ready) do
+    cond do
+      # Priority 1: Unhealthy bots need immediate attention
+      not Enum.empty?(unhealthy) ->
+        bot_list = Enum.join(unhealthy, ", ")
+        "🔴 Restore health: #{bot_list} needs debugging"
+
+      # Priority 2: High blocker count indicates stuck work
+      length(blockers) > 5 ->
+        "🚨 High blocker surge: #{length(blockers)} tasks blocked — unblock high-priority first"
+
+      # Priority 3: Significant code quality degradation
+      Enum.any?(credo, fn {_bot, count} -> count > 15 end) ->
+        worst = Enum.max_by(credo, fn {_bot, count} -> count end)
+        {bot, count} = worst
+        "⚠️  Code quality: #{bot} has #{count} violations — fix strictest first"
+
+      # Priority 4: Deployments ready to ship
+      not Enum.empty?(ready) ->
+        "🚀 Ready to deploy: #{Enum.join(ready, ", ")} — test & publish"
+
+      # All clear
+      true ->
+        "✅ Systems nominal — plan next iteration or review backlog"
+    end
   end
 
   defp nats_request(subject, payload) do
