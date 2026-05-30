@@ -145,23 +145,30 @@ defmodule BotArmyDispatcher.NATS.Consumer do
     {:noreply, state}
   end
 
-  defp dispatch_message(%{topic: "dispatcher.system.health.digest.query", reply_to: reply} = msg) do
+  defp dispatch_message(%{topic: "dispatcher.system.health.digest.query"} = msg) do
     # Request/reply handler for system health digest queries
-    latest = GenServer.call(BotArmyDispatcher.SystemObserver, :get_latest_digest, 5000)
+    reply = Map.get(msg, :reply_to)
 
-    response =
-      if latest do
-        BotArmyRuntime.NATS.Reply.ok(latest)
-      else
-        BotArmyRuntime.NATS.Reply.error("No digest available yet", "no_digest")
+    if reply do
+      latest = GenServer.call(BotArmyDispatcher.SystemObserver, :get_latest_digest, 5000)
+
+      response =
+        if latest do
+          BotArmyRuntime.NATS.Reply.ok(latest)
+        else
+          BotArmyRuntime.NATS.Reply.error("No digest available yet", :no_digest)
+        end
+
+      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+        {:ok, conn} ->
+          Gnat.pub(conn, reply, Jason.encode!(response))
+          Logger.debug("[DispatcherConsumer] Digest query response sent")
+
+        {:error, e} ->
+          Logger.warning("[DispatcherConsumer] Failed to respond to digest query: #{inspect(e)}")
       end
-
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
-      {:ok, conn} ->
-        Gnat.pub(conn, reply, Jason.encode!(response))
-
-      {:error, _} ->
-        Logger.warning("[DispatcherConsumer] Failed to respond to digest query")
+    else
+      Logger.warning("[DispatcherConsumer] Digest query received but no reply_to field")
     end
   rescue
     e ->
