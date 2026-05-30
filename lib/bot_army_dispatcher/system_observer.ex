@@ -43,7 +43,7 @@ defmodule BotArmyDispatcher.SystemObserver do
     interval = Keyword.get(opts, :interval_ms, @default_interval_ms)
     schedule_analysis(interval)
     Logger.info("[SystemObserver] Starting with #{interval}ms interval")
-    {:ok, %{interval: interval, previous_digest: nil}}
+    {:ok, %{interval: interval, previous_digest: nil, digest_history: []}}
   end
 
   @impl true
@@ -73,6 +73,10 @@ defmodule BotArmyDispatcher.SystemObserver do
 
     try do
       digest = synthesize_digest()
+
+      # Keep rolling history (last 10 digests for pattern detection)
+      history = [digest | state.digest_history] |> Enum.take(10)
+
       publish_digest(digest)
       write_to_para(digest)
 
@@ -80,7 +84,7 @@ defmodule BotArmyDispatcher.SystemObserver do
       detect_and_alert_anomalies(state.previous_digest, digest)
 
       Logger.info("[SystemObserver] Analysis complete")
-      %{state | previous_digest: digest}
+      %{state | previous_digest: digest, digest_history: history}
     rescue
       e ->
         Logger.error("[SystemObserver] Analysis failed: #{inspect(e)}")
@@ -101,7 +105,8 @@ defmodule BotArmyDispatcher.SystemObserver do
       "test_signal_age_hours" => get_test_signal_age(),
       "credo_violations" => credo,
       "ready_to_deploy" => ready,
-      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready)
+      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready),
+      "observations" => compute_observations(blockers)
     }
   end
 
@@ -199,6 +204,21 @@ defmodule BotArmyDispatcher.SystemObserver do
     _ -> false
   end
 
+  defp compute_observations(blockers) do
+    # Observations from learned patterns and trends
+    # (enhanced version will track digest history and compute trend analysis)
+    case length(blockers) do
+      0 ->
+        ["No blockers — team is unblocked"]
+
+      n when n > 5 ->
+        ["Persistent blocker load: #{n} tasks awaiting decisions"]
+
+      _ ->
+        []
+    end
+  end
+
   defp compute_suggested_focus(blockers, unhealthy, credo, ready) do
     cond do
       # Priority 1: Unhealthy bots need immediate attention
@@ -284,31 +304,44 @@ defmodule BotArmyDispatcher.SystemObserver do
     credo = digest["credo_violations"]
     ready = digest["ready_to_deploy"]
     focus = digest["suggested_focus"]
+    observations = digest["observations"] || []
 
     blockers_str = if Enum.empty?(blockers), do: "_None_", else: blockers_md(blockers)
     unhealthy_str = if Enum.empty?(unhealthy), do: "_None_", else: Enum.join(unhealthy, ", ")
     credo_str = if Enum.empty?(credo), do: "_None_", else: credo_md(credo)
     ready_str = if Enum.empty?(ready), do: "_None_", else: Enum.join(ready, ", ")
 
+    observations_str =
+      if Enum.empty?(observations) do
+        "_All systems nominal_"
+      else
+        Enum.map_join(observations, "\n", fn obs -> "- #{obs}" end)
+      end
+
     """
     # System Health Digest
 
     **Generated:** #{timestamp}
 
-    ## Blockers
-    #{blockers_str}
-
-    ## Unhealthy Bots
-    #{unhealthy_str}
-
-    ## Code Quality (Credo Violations)
-    #{credo_str}
-
-    ## Ready to Deploy
-    #{ready_str}
+    ## Observations
+    #{observations_str}
 
     ## Suggested Focus
-    #{focus}
+    → #{focus}
+
+    ## Details
+
+    ### Blockers
+    #{blockers_str}
+
+    ### Unhealthy Bots
+    #{unhealthy_str}
+
+    ### Code Quality (Credo Violations)
+    #{credo_str}
+
+    ### Ready to Deploy
+    #{ready_str}
     """
   end
 
