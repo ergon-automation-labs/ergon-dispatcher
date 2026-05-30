@@ -11,4 +11,13 @@ config :bot_army_dispatcher, BotArmyDispatcher.Repo,
   password: "postgres"
 
 config :bot_army_dispatcher,
-  factory_fixer_routing_enabled: true
+  factory_fixer_routing_enabled: true,
+  topic_skills: %{
+    "alerts." => "diagnose",
+    "dlq." => "diagnose",
+    "risk.critical" => "diagnose",
+    "github.pr" => "code_review",
+    "github.ci.failure" => "diagnose",
+    "github.issue" => "triage",
+    "surface.build" => "diagnose"
+  }

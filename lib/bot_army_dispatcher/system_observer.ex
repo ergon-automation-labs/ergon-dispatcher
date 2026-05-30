@@ -38,37 +38,43 @@ defmodule BotArmyDispatcher.SystemObserver do
     interval = Keyword.get(opts, :interval_ms, @default_interval_ms)
     schedule_analysis(interval)
     Logger.info("[SystemObserver] Starting with #{interval}ms interval")
-    {:ok, %{interval: interval}}
+    {:ok, %{interval: interval, previous_digest: nil}}
   end
 
   @impl true
   def handle_info(:run_analysis, state) do
-    run_analysis()
+    new_state = run_analysis(state)
     schedule_analysis(state.interval)
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   @impl true
   def handle_cast(:analyze_now, state) do
-    run_analysis()
-    {:noreply, state}
+    new_state = run_analysis(state)
+    {:noreply, new_state}
   end
 
   defp schedule_analysis(interval) do
     Process.send_after(self(), :run_analysis, interval)
   end
 
-  defp run_analysis do
+  defp run_analysis(state) do
     Logger.info("[SystemObserver] Starting system health analysis")
 
     try do
       digest = synthesize_digest()
       publish_digest(digest)
       write_to_para(digest)
+
+      # Detect anomalies and alert if needed
+      detect_and_alert_anomalies(state.previous_digest, digest)
+
       Logger.info("[SystemObserver] Analysis complete")
+      %{state | previous_digest: digest}
     rescue
       e ->
         Logger.error("[SystemObserver] Analysis failed: #{inspect(e)}")
+        state
     end
   end
 
@@ -267,6 +273,83 @@ defmodule BotArmyDispatcher.SystemObserver do
     ## Suggested Focus
     #{focus}
     """
+  end
+
+  defp detect_and_alert_anomalies(nil, _current), do: :ok
+
+  defp detect_and_alert_anomalies(previous, current) do
+    alerts = []
+
+    # Check for blocker surge (3+ new blockers)
+    prev_blockers = length(Map.get(previous, "blockers", []))
+    curr_blockers = length(Map.get(current, "blockers", []))
+
+    alerts =
+      if curr_blockers > prev_blockers + 2 do
+        [
+          "🚨 Blocker surge: #{prev_blockers} → #{curr_blockers} tasks blocked"
+          | alerts
+        ]
+      else
+        alerts
+      end
+
+    # Check for new unhealthy bots
+    prev_unhealthy = MapSet.new(Map.get(previous, "unhealthy_bots", []))
+    curr_unhealthy = MapSet.new(Map.get(current, "unhealthy_bots", []))
+    new_unhealthy = MapSet.difference(curr_unhealthy, prev_unhealthy)
+
+    alerts =
+      if MapSet.size(new_unhealthy) > 0 do
+        new_list = new_unhealthy |> MapSet.to_list() |> Enum.join(", ")
+        ["🔴 New unhealthy bots: #{new_list}" | alerts]
+      else
+        alerts
+      end
+
+    # Check for credo violations surge (5+ new violations in a single bot)
+    prev_credo = Map.get(previous, "credo_violations", %{})
+    curr_credo = Map.get(current, "credo_violations", %{})
+
+    alerts =
+      curr_credo
+      |> Enum.reduce(alerts, fn {bot, curr_count}, acc ->
+        prev_count = Map.get(prev_credo, bot, 0)
+
+        if curr_count > prev_count + 4 do
+          ["⚠️  Credo spike in #{bot}: #{prev_count} → #{curr_count}" | acc]
+        else
+          acc
+        end
+      end)
+
+    # Send alert if any anomalies detected
+    if not Enum.empty?(alerts) do
+      publish_discord_alert(alerts)
+    end
+  end
+
+  defp publish_discord_alert(alerts) do
+    content = alerts |> Enum.reverse() |> Enum.join("\n")
+
+    envelope = %{
+      "event" => "bridge.discord.message.send",
+      "source" => "bot_army_dispatcher",
+      "payload" => %{
+        "bot_name" => "dispatcher",
+        "channel" => "alerts",
+        "content" => content,
+        "username" => "System Health"
+      }
+    }
+
+    case BotArmyRuntime.NATS.Publisher.publish("bridge.discord.message.send", envelope) do
+      {:ok, _} ->
+        Logger.info("[SystemObserver] Discord anomaly alert published")
+
+      {:error, reason} ->
+        Logger.warning("[SystemObserver] Failed to publish Discord alert: #{inspect(reason)}")
+    end
   end
 
   defp blockers_md(blockers) do

@@ -218,11 +218,24 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
   end
 
   defp skill_for_topic(topic) do
+    topic_skills = Application.get_env(:bot_army_dispatcher, :topic_skills, %{})
+
+    topic_skills
+    |> Enum.find_value(fn {pattern, skill} ->
+      if matches_pattern?(topic, pattern) do
+        skill
+      end
+    end)
+    |> then(&(&1 || "diagnose"))
+  end
+
+  defp matches_pattern?(topic, pattern) do
     cond do
-      String.starts_with?(topic, "alerts.") -> "diagnose"
-      String.starts_with?(topic, "dlq.") -> "diagnose"
-      topic == "risk.critical" -> "diagnose"
-      true -> "diagnose"
+      String.ends_with?(pattern, ".") ->
+        String.starts_with?(topic, pattern)
+
+      true ->
+        topic == pattern
     end
   end
 
