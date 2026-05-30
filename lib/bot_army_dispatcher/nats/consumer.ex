@@ -79,7 +79,13 @@ defmodule BotArmyDispatcher.NATS.Consumer do
   end
 
   defp setup_subscriptions(conn) do
-    subjects = ["alerts.>", "dlq.>", "risk.critical", "factory.fixer.request"]
+    subjects = [
+      "alerts.>",
+      "dlq.>",
+      "risk.critical",
+      "factory.fixer.request",
+      "dispatcher.system.health.digest.query"
+    ]
 
     subjects
     |> Enum.map(fn subject ->
