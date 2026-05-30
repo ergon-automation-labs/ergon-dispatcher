@@ -306,10 +306,9 @@ defmodule BotArmyDispatcher.SystemObserver do
         |> Enum.filter(fn {_bot, count} -> count >= 3 end)
         |> Enum.map(fn {bot, count} -> "#{bot}" end)
 
-      if not Enum.empty?(frequent_issues) do
-        ["🔴 Recurring issues: #{Enum.join(frequent_issues, ", ")} unhealthy in 3+ recent cycles"]
-      else
-        []
+      case frequent_issues do
+        [] -> []
+        issues -> ["🔴 Recurring issues: #{Enum.join(issues, ", ")} unhealthy in 3+ recent cycles"]
       end
     end
   end
