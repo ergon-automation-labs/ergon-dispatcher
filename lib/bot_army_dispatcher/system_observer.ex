@@ -65,6 +65,7 @@ defmodule BotArmyDispatcher.SystemObserver do
       digest = synthesize_digest()
       publish_digest(digest)
       write_to_para(digest)
+      write_local_copy(digest)
 
       # Detect anomalies and alert if needed
       detect_and_alert_anomalies(state.previous_digest, digest)
@@ -237,6 +238,20 @@ defmodule BotArmyDispatcher.SystemObserver do
 
       {:error, e} ->
         Logger.warning("[SystemObserver] Failed to write to PARA: #{inspect(e)}")
+    end
+  end
+
+  defp write_local_copy(digest) do
+    # Write local copy for Claude Code session startup briefing
+    content = format_digest_for_para(digest)
+    local_path = Path.expand("~/.claude/system_digest.md")
+
+    case File.write(local_path, content) do
+      :ok ->
+        Logger.info("[SystemObserver] Wrote digest to local: #{local_path}")
+
+      {:error, e} ->
+        Logger.warning("[SystemObserver] Failed to write local digest: #{inspect(e)}")
     end
   end
 
