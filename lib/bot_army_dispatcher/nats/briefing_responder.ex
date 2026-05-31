@@ -42,7 +42,11 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
         Process.send_after(self(), :reconnect, @reconnect_delay_ms)
         {:noreply, %{state | reconnect_attempt: state.reconnect_attempt + 1}}
     end
-  end
+  rescue
+    e ->
+      Logger.error("[BriefingResponder] Exception during connection: #{inspect(e)}")
+      Process.send_after(self(), :reconnect, @reconnect_delay_ms)
+      {:noreply, %{state | reconnect_attempt: state.reconnect_attempt + 1}}
 
   @impl true
   def handle_info({:msg, sub, msg}, state) do

@@ -4,7 +4,7 @@ defmodule BotArmyDispatcher.MixProject do
   def project do
     [
       app: :bot_army_dispatcher,
-      version: "0.5.21",
+      version: "0.5.22",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
