@@ -536,7 +536,7 @@ defmodule BotArmyDispatcher.SystemObserver do
       case BotArmyRuntime.NATS.Publisher.request(
              "context.notification.get",
              %{"tenant_id" => tenant_id, "user_id" => user_id},
-             3_000
+             timeout_ms: 3_000
            ) do
         {:ok, %{"ok" => true, "notification_allowed" => false}} ->
           urgency == :critical
