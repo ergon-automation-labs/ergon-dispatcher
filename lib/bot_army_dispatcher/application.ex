@@ -17,6 +17,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_repo()
       |> maybe_add_health_observer()
       |> maybe_add_system_observer()
+      |> maybe_add_daily_briefing_orchestrator()
       |> maybe_add_intent_evaluator()
       |> maybe_add_pulse_publisher()
       |> maybe_add_consumer()
@@ -41,6 +42,12 @@ defmodule BotArmyDispatcher.Application do
 
   defp maybe_add_system_observer(children) do
     if env() == :test, do: children, else: [{BotArmyDispatcher.SystemObserver, []} | children]
+  end
+
+  defp maybe_add_daily_briefing_orchestrator(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.DailyBriefingOrchestrator, []} | children]
   end
 
   defp maybe_add_intent_evaluator(children) do
