@@ -222,14 +222,39 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyRuntime.NATS.Publisher.publish("bridge.discord.message.send", envelope) do
-      {:ok, _} ->
-        Logger.debug("[SelfHealHandler] Discord alert published for #{target_bot}")
+    publish_discord_with_context_check(envelope, :high)
+  end
 
-      {:error, reason} ->
-        Logger.warning(
-          "[SelfHealHandler] Failed to publish Discord alert for #{target_bot}: #{inspect(reason)}"
-        )
+  defp publish_discord_with_context_check(envelope, urgency \\ :high) do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+    user_id = System.get_env("BOT_ARMY_USER_ID") || "00000000-0000-0000-0000-000000000002"
+
+    notification_allowed? =
+      case BotArmyRuntime.NATS.Publisher.request(
+             "context.notification.get",
+             %{"tenant_id" => tenant_id, "user_id" => user_id},
+             3_000
+           ) do
+        {:ok, %{"ok" => true, "notification_allowed" => false}} ->
+          urgency == :critical
+
+        {:ok, %{"ok" => true}} ->
+          true
+
+        _ ->
+          true
+      end
+
+    if notification_allowed? do
+      case BotArmyRuntime.NATS.Publisher.publish("bridge.discord.message.send", envelope) do
+        {:ok, _} ->
+          Logger.debug("[SelfHealHandler] Discord alert published")
+
+        {:error, reason} ->
+          Logger.warning("[SelfHealHandler] Failed to publish Discord alert: #{inspect(reason)}")
+      end
+    else
+      Logger.info("[SelfHealHandler] Discord alert suppressed by context broker DND")
     end
   end
 
