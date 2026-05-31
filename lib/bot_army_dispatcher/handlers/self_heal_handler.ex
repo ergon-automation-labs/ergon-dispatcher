@@ -225,7 +225,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
     publish_discord_with_context_check(envelope, :high)
   end
 
-  defp publish_discord_with_context_check(envelope, urgency \\ :high) do
+  defp publish_discord_with_context_check(envelope, _urgency \\ :high) do
     tenant_id = "00000000-0000-0000-0000-000000000001"
     user_id = System.get_env("BOT_ARMY_USER_ID") || "00000000-0000-0000-0000-000000000002"
 
@@ -235,11 +235,11 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
              %{"tenant_id" => tenant_id, "user_id" => user_id},
              timeout_ms: 3_000
            ) do
-        {:ok, %{"ok" => true, "notification_allowed" => false}} ->
-          urgency == :critical
+        {:ok, %{"ok" => true, "notification_allowed" => true}} ->
+          true
 
         {:ok, %{"ok" => true}} ->
-          true
+          false
 
         _ ->
           true
