@@ -129,22 +129,25 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_gtd_whats_next do
-    case BotArmyRuntime.NATS.Publisher.request("gtd.whats_next", %{}, timeout_ms: 5_000) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} ->
+    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", %{}, timeout_ms: 5_000) do
+      {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
+        tasks
+
+      {:ok, %{"data" => %{"human" => tasks}}} when is_list(tasks) ->
         tasks
 
       {:ok, _other} ->
         []
 
       {:error, reason} ->
-        Logger.warning("[BriefingResponder] gtd.whats_next failed: #{inspect(reason)}")
+        Logger.warning("[BriefingResponder] bridge.gtd.whats_next failed: #{inspect(reason)}")
         :unavailable
     end
   end
 
   defp fetch_active_tasks do
-    case BotArmyRuntime.NATS.Publisher.request("gtd.active_tasks", %{}, timeout_ms: 5_000) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} ->
+    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", %{}, timeout_ms: 5_000) do
+      {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
         tasks
 
       {:ok, _other} ->
@@ -156,8 +159,11 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_inbox_tasks do
-    case BotArmyRuntime.NATS.Publisher.request("inbox.get", %{}, timeout_ms: 5_000) do
+    case BotArmyRuntime.NATS.Publisher.request("bridge.inbox.list", %{}, timeout_ms: 5_000) do
       {:ok, %{"data" => %{"items" => items}}} ->
+        items
+
+      {:ok, %{"data" => items}} when is_list(items) ->
         items
 
       {:ok, _other} ->
@@ -169,13 +175,8 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_fitness_today do
-    case BotArmyRuntime.NATS.Publisher.request("fitness.today", %{}, timeout_ms: 5_000) do
-      {:ok, %{"data" => data}} ->
-        data
-
-      {:error, _reason} ->
-        :unavailable
-    end
+    # Fitness doesn't have a dedicated responder subject yet
+    :unavailable
   end
 
   defp fetch_health_digest do
