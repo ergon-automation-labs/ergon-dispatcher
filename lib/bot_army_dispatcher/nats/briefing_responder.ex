@@ -50,11 +50,11 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   @impl true
-  def handle_info({:msg, sub, msg}, state) do
-    if Enum.member?(state.subscriptions, sub) do
+  def handle_info({:msg, msg}, state) do
+    if Enum.member?(state.subscriptions, msg.sid) do
       handle_briefing_request(msg)
     else
-      Logger.warning("[BriefingResponder] Received message from unknown subscription")
+      Logger.warning("[BriefingResponder] Received message from unknown subscription: #{msg.sid}")
     end
 
     {:noreply, state}
