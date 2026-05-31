@@ -135,12 +135,12 @@ defmodule BotArmyDispatcher.ExceptionHandlingTest do
       # Verify transient errors would trigger retry
       Enum.each(transient_errors, fn error ->
         # These should be retryable in actual execution
-        assert is_transient_error?(error)
+        assert transient_error?(error)
       end)
 
       # Verify permanent errors would not retry
       Enum.each(permanent_errors, fn error ->
-        assert not is_transient_error?(error)
+        assert not transient_error?(error)
       end)
     end
 
@@ -169,7 +169,7 @@ defmodule BotArmyDispatcher.ExceptionHandlingTest do
   # Test Helpers
   # ============================================================================
 
-  defp is_transient_error?(reason) do
+  defp transient_error?(reason) do
     case reason do
       :timeout -> true
       :disconnected -> true

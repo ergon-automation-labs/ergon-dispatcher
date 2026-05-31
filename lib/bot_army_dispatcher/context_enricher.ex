@@ -236,7 +236,7 @@ defmodule BotArmyDispatcher.ContextEnricher do
 
   defp extract_runbooks(docs) when is_list(docs) do
     docs
-    |> Enum.filter(&is_runbook?/1)
+    |> Enum.filter(&runbook?/1)
     |> Enum.map(&doc_summary/1)
     |> Enum.take(@max_context_results)
   end
@@ -245,26 +245,26 @@ defmodule BotArmyDispatcher.ContextEnricher do
 
   defp extract_guides(docs) when is_list(docs) do
     docs
-    |> Enum.filter(&is_guide?/1)
+    |> Enum.filter(&guide?/1)
     |> Enum.map(&doc_summary/1)
     |> Enum.take(@max_context_results)
   end
 
   defp extract_guides(_), do: []
 
-  defp is_runbook?(doc) when is_map(doc) do
+  defp runbook?(doc) when is_map(doc) do
     path = Map.get(doc, "path", "")
     String.contains?(path, "runbook")
   end
 
-  defp is_runbook?(_), do: false
+  defp runbook?(_), do: false
 
-  defp is_guide?(doc) when is_map(doc) do
+  defp guide?(doc) when is_map(doc) do
     path = Map.get(doc, "path", "")
     String.contains?(path, ["guide", "docs"]) and not String.contains?(path, "runbook")
   end
 
-  defp is_guide?(_), do: false
+  defp guide?(_), do: false
 
   defp doc_summary(doc) when is_map(doc) do
     %{
