@@ -162,7 +162,7 @@ defmodule BotArmyDispatcher.ContextEnricher do
   # ============================================================================
 
   defp query_nats_service(subject, payload, timeout_ms) do
-    case NATSConnection.get_connection() do
+    case GenServer.call(NATSConnection, :get_connection, 5000) do
       {:ok, conn} ->
         case Gnat.request(conn, subject, payload, receive_timeout: timeout_ms) do
           {:ok, %{body: response}} ->
