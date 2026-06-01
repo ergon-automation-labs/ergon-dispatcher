@@ -129,7 +129,11 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_gtd_whats_next do
-    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", %{}, timeout_ms: 5_000) do
+    payload = %{"tenant_id" => "00000000-0000-0000-0000-000000000001"}
+
+    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", payload,
+           timeout_ms: 5_000
+         ) do
       {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
         tasks
 
@@ -146,7 +150,11 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_active_tasks do
-    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", %{}, timeout_ms: 5_000) do
+    payload = %{"tenant_id" => "00000000-0000-0000-0000-000000000001"}
+
+    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", payload,
+           timeout_ms: 5_000
+         ) do
       {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
         tasks
 
