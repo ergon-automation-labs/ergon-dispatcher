@@ -134,11 +134,15 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", payload,
            timeout_ms: 5_000
          ) do
-      {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
+      {:ok, %{"data" => %{"human" => %{"tasks" => [_ | _] = tasks}}}} ->
         tasks
 
-      {:ok, %{"data" => %{"human" => tasks}}} when is_list(tasks) ->
+      {:ok, %{"data" => %{"human" => [_ | _] = tasks}}} ->
         tasks
+
+      {:ok, %{"data" => %{"human" => human}}} when is_map(human) and map_size(human) == 0 ->
+        # Scores empty, fall back to fetching active tasks directly
+        fetch_active_tasks_fallback()
 
       {:ok, _other} ->
         []
@@ -146,6 +150,28 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
       {:error, reason} ->
         Logger.warning("[BriefingResponder] bridge.gtd.whats_next failed: #{inspect(reason)}")
         :unavailable
+    end
+  end
+
+  defp fetch_active_tasks_fallback do
+    payload = %{
+      "tenant_id" => "00000000-0000-0000-0000-000000000001",
+      "status" => "active",
+      "limit" => 3
+    }
+
+    case BotArmyRuntime.NATS.Publisher.request("gtd.task.list", payload, timeout_ms: 5_000) do
+      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
+        Enum.map(tasks, fn task ->
+          %{
+            "title" => Map.get(task, "title", "Untitled"),
+            "id" => Map.get(task, "id"),
+            "status" => Map.get(task, "status")
+          }
+        end)
+
+      _ ->
+        []
     end
   end
 
