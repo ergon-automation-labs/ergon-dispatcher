@@ -490,7 +490,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     end
   end
 
-  defp render_fitness(fitness_list) when is_list(fitness_list) and length(fitness_list) > 0 do
+  defp render_fitness([_ | _] = fitness_list) do
     fitness_list
     |> Enum.take(1)
     |> Enum.map_join("\n", fn item ->
