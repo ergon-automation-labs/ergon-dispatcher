@@ -138,7 +138,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp fetch_whats_next(tenant_id) do
     case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.gtd.whats_next",
+           "gtd.whats_next",
            %{"tenant_id" => tenant_id, "include" => ["tasks", "projects", "goals"]},
            timeout_ms: 5_000
          ) do
