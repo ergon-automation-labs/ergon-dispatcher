@@ -106,7 +106,8 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
       active_tasks: Task.async(fn -> fetch_active_tasks() end),
       inbox_tasks: Task.async(fn -> fetch_inbox_tasks() end),
       fitness: Task.async(fn -> fetch_fitness_today() end),
-      health_digest: Task.async(fn -> fetch_health_digest() end)
+      health_digest: Task.async(fn -> fetch_health_digest() end),
+      blockers: Task.async(fn -> fetch_blockers() end)
     }
 
     Map.new(tasks, fn {key, task} ->
@@ -223,6 +224,38 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     end
   end
 
+  defp fetch_blockers do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    case BotArmyRuntime.NATS.Publisher.request(
+           "gtd.task.list",
+           %{
+             "tenant_id" => tenant_id,
+             "status" => "blocked",
+             "limit" => 10
+           },
+           timeout_ms: 5_000
+         ) do
+      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
+        Enum.map(tasks, fn task ->
+          %{
+            "id" => Map.get(task, "id"),
+            "title" => Map.get(task, "title", "Untitled"),
+            "status" => "blocked"
+          }
+        end)
+
+      {:error, reason} ->
+        Logger.warning("[BriefingResponder] Blocker fetch failed: #{inspect(reason)}")
+        []
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
   defp render_briefing(sections, generated_at) do
     date_label = format_date(generated_at)
     time_label = format_time(generated_at)
@@ -237,6 +270,9 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
     ## Active Work
     #{render_task_list(sections.active_tasks)}
+
+    ## Blockers
+    #{render_blockers(sections.blockers)}
 
     ## Inbox
     #{render_inbox(sections.inbox_tasks)}
@@ -298,6 +334,32 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
       title = Map.get(task, "title", "Untitled")
       "#{idx}. #{title}"
     end)
+  end
+
+  defp render_blockers([]) do
+    "_No blocked tasks_"
+  end
+
+  defp render_blockers(:unavailable) do
+    "_Unavailable_"
+  end
+
+  defp render_blockers(tasks) when is_list(tasks) do
+    if Enum.empty?(tasks) do
+      "_No blocked tasks_"
+    else
+      tasks
+      |> Enum.take(3)
+      |> Enum.map_join("\n", fn task ->
+        title = Map.get(task, "title", "Untitled")
+        task_id = Map.get(task, "id", "unknown")
+        "⏸️  **#{title}** (`#{String.slice(task_id, 0..7)}...`) — resolve dependencies to unblock"
+      end)
+    end
+  end
+
+  defp render_blockers(_) do
+    "_Unable to analyze blockers_"
   end
 
   defp render_inbox(:unavailable) do
