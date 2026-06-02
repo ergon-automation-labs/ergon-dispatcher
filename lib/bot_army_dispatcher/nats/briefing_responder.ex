@@ -98,17 +98,22 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
       Gnat.pub(msg.gnat, msg.reply_to, error_response)
   end
 
-  # Copy of DailyBriefingOrchestrator logic
+  # Fetch all sections - uses real bridge.gtd.whats_next endpoint
 
   defp fetch_all_sections do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    # Fetch whats_next data which includes both tasks and projects
+    whats_next = fetch_whats_next(tenant_id)
+
     tasks = %{
-      projects: Task.async(fn -> fetch_projects() end),
-      due_today: Task.async(fn -> fetch_due_today() end),
-      in_progress: Task.async(fn -> fetch_in_progress() end),
-      blockers: Task.async(fn -> fetch_blockers() end),
-      completed_today: Task.async(fn -> fetch_completed_today() end),
+      projects: Task.async(fn -> extract_projects(whats_next) end),
+      due_today: Task.async(fn -> extract_due_today(whats_next) end),
+      in_progress: Task.async(fn -> extract_in_progress(whats_next) end),
+      blockers: Task.async(fn -> fetch_blockers(tenant_id) end),
+      completed_today: Task.async(fn -> extract_completed_today(whats_next) end),
       fitness: Task.async(fn -> fetch_fitness_today() end),
-      high_priority_inbox: Task.async(fn -> fetch_high_priority_inbox() end),
+      high_priority_inbox: Task.async(fn -> extract_high_priority(whats_next) end),
       health_digest: Task.async(fn -> fetch_health_digest() end)
     }
 
@@ -131,19 +136,36 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     end)
   end
 
-  defp fetch_projects do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
-
+  defp fetch_whats_next(tenant_id) do
     case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.project.list",
-           %{"tenant_id" => tenant_id, "limit" => 5, "status" => "active"},
+           "bridge.gtd.whats_next",
+           %{"tenant_id" => tenant_id, "include" => ["tasks", "projects", "goals"]},
            timeout_ms: 5_000
          ) do
-      {:ok, %{"data" => %{"projects" => projects}}} when is_list(projects) ->
-        Enum.map(projects, fn p ->
+      {:ok, response} ->
+        response
+
+      {:error, reason} ->
+        Logger.warning("[BriefingResponder] whats_next fetch failed: #{inspect(reason)}")
+        nil
+    end
+  rescue
+    e ->
+      Logger.error("[BriefingResponder] Exception fetching whats_next: #{inspect(e)}")
+      nil
+  end
+
+  defp extract_projects(nil), do: []
+
+  defp extract_projects(whats_next) when is_map(whats_next) do
+    case Map.get(whats_next, "data") do
+      %{"bots" => bots} when is_map(bots) ->
+        bots
+        |> Map.get("projects", [])
+        |> Enum.take(5)
+        |> Enum.map(fn p ->
           %{
             "name" => Map.get(p, "name", "Untitled"),
-            "status" => Map.get(p, "status"),
             "id" => Map.get(p, "id")
           }
         end)
@@ -151,103 +173,66 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
       _ ->
         []
     end
-  rescue
-    _ -> []
   end
 
-  defp fetch_due_today do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
+  defp extract_due_today(nil), do: []
 
-    case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.task.list",
-           %{"tenant_id" => tenant_id, "limit" => 20, "status" => "due_today"},
-           timeout_ms: 5_000
-         ) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
-        format_task_list(tasks)
-
-      _ ->
-        []
-    end
-  rescue
-    _ -> []
-  end
-
-  defp fetch_in_progress do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
-
-    case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.task.list",
-           %{"tenant_id" => tenant_id, "limit" => 10, "status" => "in_progress"},
-           timeout_ms: 5_000
-         ) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
-        format_task_list(tasks)
-
-      _ ->
-        []
-    end
-  rescue
-    _ -> []
-  end
-
-  defp fetch_completed_today do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
-    today_start = DateTime.new!(Date.utc_today(), ~T[00:00:00], "Etc/UTC")
-
-    case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.task.list",
-           %{"tenant_id" => tenant_id, "limit" => 10, "status" => "done"},
-           timeout_ms: 5_000
-         ) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
-        tasks
-        |> Enum.filter(fn t ->
-          completed = Map.get(t, "completed_at")
-
-          if completed do
-            case DateTime.from_iso8601(completed) do
-              {:ok, dt, _} ->
-                DateTime.compare(dt, today_start) in [:eq, :gt]
-
-              _ ->
-                false
-            end
-          else
-            false
-          end
-        end)
+  defp extract_due_today(whats_next) when is_map(whats_next) do
+    case Map.get(whats_next, "data") do
+      %{"human" => human} when is_map(human) ->
+        human
+        |> Map.get("due_today", [])
         |> Enum.take(5)
         |> format_task_list()
 
       _ ->
         []
     end
-  rescue
-    _ -> []
   end
 
-  defp fetch_high_priority_inbox do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
+  defp extract_in_progress(nil), do: []
 
-    case BotArmyRuntime.NATS.Publisher.request(
-           "bridge.task.list",
-           %{
-             "tenant_id" => tenant_id,
-             "limit" => 10,
-             "project_id" => "_inbox",
-             "priority" => "high"
-           },
-           timeout_ms: 5_000
-         ) do
-      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
-        format_task_list(tasks)
+  defp extract_in_progress(whats_next) when is_map(whats_next) do
+    case Map.get(whats_next, "data") do
+      %{"human" => human} when is_map(human) ->
+        human
+        |> Map.get("in_progress", [])
+        |> Enum.take(5)
+        |> format_task_list()
 
       _ ->
         []
     end
-  rescue
-    _ -> []
+  end
+
+  defp extract_completed_today(nil), do: []
+
+  defp extract_completed_today(whats_next) when is_map(whats_next) do
+    case Map.get(whats_next, "data") do
+      %{"human" => human} when is_map(human) ->
+        human
+        |> Map.get("completed_today", [])
+        |> Enum.take(5)
+        |> format_task_list()
+
+      _ ->
+        []
+    end
+  end
+
+  defp extract_high_priority(nil), do: []
+
+  defp extract_high_priority(whats_next) when is_map(whats_next) do
+    case Map.get(whats_next, "data") do
+      %{"human" => human} when is_map(human) ->
+        human
+        |> Map.get("high_priority", [])
+        |> Enum.take(5)
+        |> format_task_list()
+
+      _ ->
+        []
+    end
   end
 
   defp format_task_list(tasks) do
@@ -278,9 +263,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     end
   end
 
-  defp fetch_blockers do
-    tenant_id = "00000000-0000-0000-0000-000000000001"
-
+  defp fetch_blockers(tenant_id) do
     case BotArmyRuntime.NATS.Publisher.request(
            "gtd.task.list",
            %{
