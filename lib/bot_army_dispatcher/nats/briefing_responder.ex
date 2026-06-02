@@ -102,12 +102,13 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp fetch_all_sections do
     tasks = %{
+      projects: Task.async(fn -> fetch_projects() end),
       due_today: Task.async(fn -> fetch_due_today() end),
       in_progress: Task.async(fn -> fetch_in_progress() end),
       blockers: Task.async(fn -> fetch_blockers() end),
       completed_today: Task.async(fn -> fetch_completed_today() end),
-      high_priority_inbox: Task.async(fn -> fetch_high_priority_inbox() end),
       fitness: Task.async(fn -> fetch_fitness_today() end),
+      high_priority_inbox: Task.async(fn -> fetch_high_priority_inbox() end),
       health_digest: Task.async(fn -> fetch_health_digest() end)
     }
 
@@ -128,6 +129,30 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
       {key, result}
     end)
+  end
+
+  defp fetch_projects do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    case BotArmyRuntime.NATS.Publisher.request(
+           "bridge.project.list",
+           %{"tenant_id" => tenant_id, "limit" => 5, "status" => "active"},
+           timeout_ms: 5_000
+         ) do
+      {:ok, %{"data" => %{"projects" => projects}}} when is_list(projects) ->
+        Enum.map(projects, fn p ->
+          %{
+            "name" => Map.get(p, "name", "Untitled"),
+            "status" => Map.get(p, "status"),
+            "id" => Map.get(p, "id")
+          }
+        end)
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
   end
 
   defp fetch_due_today do
@@ -294,6 +319,9 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
     Generated at #{time_label}
 
+    ## Projects & Goals
+    #{render_projects(sections.projects)}
+
     ## Due Today
     #{render_daily_tasks(sections.due_today)}
 
@@ -305,6 +333,9 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
     ## Completed Today
     #{render_completed(sections.completed_today)}
+
+    ## Fitness & Wellness
+    #{render_fitness(sections.fitness)}
 
     ## High Priority Next
     #{render_daily_tasks(sections.high_priority_inbox)}
@@ -327,6 +358,31 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp format_time(naive_dt) do
     Calendar.strftime(naive_dt, "%I:%M %p")
+  end
+
+  defp render_projects([]) do
+    "_No active projects_"
+  end
+
+  defp render_projects(:unavailable) do
+    "_Unavailable_"
+  end
+
+  defp render_projects(projects) when is_list(projects) do
+    if Enum.empty?(projects) do
+      "_No active projects_"
+    else
+      projects
+      |> Enum.take(5)
+      |> Enum.map_join("\n", fn p ->
+        name = Map.get(p, "name", "Untitled")
+        "🎯 #{name}"
+      end)
+    end
+  end
+
+  defp render_projects(_) do
+    "_Unable to load projects_"
   end
 
   defp render_blockers([]) do
@@ -406,6 +462,45 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp render_completed(_) do
     "_Unable to load completed tasks_"
+  end
+
+  defp render_fitness(:unavailable) do
+    "💪 Schedule a workout — no data available"
+  end
+
+  defp render_fitness([]) do
+    "💪 **Time for fitness!** — Nothing logged today yet. Get moving!"
+  end
+
+  defp render_fitness(fitness_data) when is_map(fitness_data) do
+    status = Map.get(fitness_data, "status", "no_activity")
+
+    case status do
+      "completed" ->
+        workout = Map.get(fitness_data, "type", "Workout")
+        "✅ #{workout} completed today"
+
+      "scheduled" ->
+        time = Map.get(fitness_data, "time", "")
+        workout = Map.get(fitness_data, "type", "Workout")
+        "🎯 #{workout} scheduled for #{time}"
+
+      _ ->
+        "💪 **Reminder:** You haven't logged fitness today. Time to move!"
+    end
+  end
+
+  defp render_fitness(fitness_list) when is_list(fitness_list) and length(fitness_list) > 0 do
+    fitness_list
+    |> Enum.take(1)
+    |> Enum.map_join("\n", fn item ->
+      name = Map.get(item, "name") || Map.get(item, "type", "Activity")
+      "✅ #{name} logged"
+    end)
+  end
+
+  defp render_fitness(_) do
+    "💪 **Reminder:** Schedule or log your fitness today!"
   end
 
   defp render_health(:unavailable) do
