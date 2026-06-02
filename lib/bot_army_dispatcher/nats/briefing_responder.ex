@@ -102,12 +102,13 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp fetch_all_sections do
     tasks = %{
-      gtd_next: Task.async(fn -> fetch_gtd_whats_next() end),
-      active_tasks: Task.async(fn -> fetch_active_tasks() end),
-      inbox_tasks: Task.async(fn -> fetch_inbox_tasks() end),
+      due_today: Task.async(fn -> fetch_due_today() end),
+      in_progress: Task.async(fn -> fetch_in_progress() end),
+      blockers: Task.async(fn -> fetch_blockers() end),
+      completed_today: Task.async(fn -> fetch_completed_today() end),
+      high_priority_inbox: Task.async(fn -> fetch_high_priority_inbox() end),
       fitness: Task.async(fn -> fetch_fitness_today() end),
-      health_digest: Task.async(fn -> fetch_health_digest() end),
-      blockers: Task.async(fn -> fetch_blockers() end)
+      health_digest: Task.async(fn -> fetch_health_digest() end)
     }
 
     Map.new(tasks, fn {key, task} ->
@@ -129,84 +130,112 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     end)
   end
 
-  defp fetch_gtd_whats_next do
-    payload = %{"tenant_id" => "00000000-0000-0000-0000-000000000001"}
+  defp fetch_due_today do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
 
-    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", payload,
+    case BotArmyRuntime.NATS.Publisher.request(
+           "bridge.task.list",
+           %{"tenant_id" => tenant_id, "limit" => 20, "status" => "due_today"},
            timeout_ms: 5_000
          ) do
-      {:ok, %{"data" => %{"human" => %{"tasks" => [_ | _] = tasks}}}} ->
-        tasks
-
-      {:ok, %{"data" => %{"human" => [_ | _] = tasks}}} ->
-        tasks
-
-      {:ok, %{"data" => %{"human" => human}}} when is_map(human) and map_size(human) == 0 ->
-        # Scores empty, fall back to fetching active tasks directly
-        fetch_active_tasks_fallback()
-
-      {:ok, _other} ->
-        []
-
-      {:error, reason} ->
-        Logger.warning("[BriefingResponder] bridge.gtd.whats_next failed: #{inspect(reason)}")
-        :unavailable
-    end
-  end
-
-  defp fetch_active_tasks_fallback do
-    payload = %{
-      "tenant_id" => "00000000-0000-0000-0000-000000000001",
-      "status" => "active",
-      "limit" => 3
-    }
-
-    case BotArmyRuntime.NATS.Publisher.request("gtd.task.list", payload, timeout_ms: 5_000) do
       {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
-        Enum.map(tasks, fn task ->
-          %{
-            "title" => Map.get(task, "title", "Untitled"),
-            "id" => Map.get(task, "id"),
-            "status" => Map.get(task, "status")
-          }
-        end)
+        format_task_list(tasks)
 
       _ ->
         []
     end
+  rescue
+    _ -> []
   end
 
-  defp fetch_active_tasks do
-    payload = %{"tenant_id" => "00000000-0000-0000-0000-000000000001"}
+  defp fetch_in_progress do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
 
-    case BotArmyRuntime.NATS.Publisher.request("bridge.gtd.whats_next", payload,
+    case BotArmyRuntime.NATS.Publisher.request(
+           "bridge.task.list",
+           %{"tenant_id" => tenant_id, "limit" => 10, "status" => "in_progress"},
            timeout_ms: 5_000
          ) do
-      {:ok, %{"data" => %{"human" => %{"tasks" => tasks}}}} ->
-        tasks
+      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
+        format_task_list(tasks)
 
-      {:ok, _other} ->
+      _ ->
         []
-
-      {:error, _reason} ->
-        :unavailable
     end
+  rescue
+    _ -> []
   end
 
-  defp fetch_inbox_tasks do
-    case BotArmyRuntime.NATS.Publisher.request("bridge.inbox.list", %{}, timeout_ms: 5_000) do
-      {:ok, %{"data" => %{"items" => items}}} ->
-        items
+  defp fetch_completed_today do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+    today_start = DateTime.new!(Date.utc_today(), ~T[00:00:00], "Etc/UTC")
 
-      {:ok, %{"data" => items}} when is_list(items) ->
-        items
+    case BotArmyRuntime.NATS.Publisher.request(
+           "bridge.task.list",
+           %{"tenant_id" => tenant_id, "limit" => 10, "status" => "done"},
+           timeout_ms: 5_000
+         ) do
+      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
+        tasks
+        |> Enum.filter(fn t ->
+          completed = Map.get(t, "completed_at")
 
-      {:ok, _other} ->
+          if completed do
+            case DateTime.from_iso8601(completed) do
+              {:ok, dt, _} ->
+                DateTime.compare(dt, today_start) in [:eq, :gt]
+
+              _ ->
+                false
+            end
+          else
+            false
+          end
+        end)
+        |> Enum.take(5)
+        |> format_task_list()
+
+      _ ->
         []
-
-      {:error, _reason} ->
-        :unavailable
     end
+  rescue
+    _ -> []
+  end
+
+  defp fetch_high_priority_inbox do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    case BotArmyRuntime.NATS.Publisher.request(
+           "bridge.task.list",
+           %{
+             "tenant_id" => tenant_id,
+             "limit" => 10,
+             "project_id" => "_inbox",
+             "priority" => "high"
+           },
+           timeout_ms: 5_000
+         ) do
+      {:ok, %{"data" => %{"tasks" => tasks}}} when is_list(tasks) ->
+        format_task_list(tasks)
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp format_task_list(tasks) do
+    Enum.map(tasks, fn t ->
+      %{
+        "id" => Map.get(t, "id"),
+        "title" => Map.get(t, "title", "Untitled"),
+        "priority" => Map.get(t, "priority", "normal"),
+        "status" => Map.get(t, "status"),
+        "due_date" => Map.get(t, "due_date"),
+        "completed_at" => Map.get(t, "completed_at")
+      }
+    end)
   end
 
   defp fetch_fitness_today do
@@ -265,22 +294,22 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
     Generated at #{time_label}
 
-    ## Today's Focus
-    #{render_gtd_section(sections.gtd_next)}
+    ## Due Today
+    #{render_daily_tasks(sections.due_today)}
 
-    ## Active Work
-    #{render_task_list(sections.active_tasks)}
+    ## In Progress
+    #{render_daily_tasks(sections.in_progress)}
 
     ## Blockers
     #{render_blockers(sections.blockers)}
 
-    ## Inbox
-    #{render_inbox(sections.inbox_tasks)}
+    ## Completed Today
+    #{render_completed(sections.completed_today)}
 
-    ## Wellness
-    #{render_fitness(sections.fitness)}
+    ## High Priority Next
+    #{render_daily_tasks(sections.high_priority_inbox)}
 
-    ## System
+    ## System Health
     #{render_health(sections.health_digest)}
 
     ---
@@ -298,42 +327,6 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   defp format_time(naive_dt) do
     Calendar.strftime(naive_dt, "%I:%M %p")
-  end
-
-  defp render_gtd_section(:unavailable) do
-    "_Unavailable — GTD service did not respond_"
-  end
-
-  defp render_gtd_section([]) do
-    "_No priority tasks found_"
-  end
-
-  defp render_gtd_section(tasks) do
-    tasks
-    |> Enum.take(3)
-    |> Enum.with_index(1)
-    |> Enum.map_join("\n", fn {task, idx} ->
-      title = Map.get(task, "title", "Untitled")
-      "#{idx}. #{title}"
-    end)
-  end
-
-  defp render_task_list(:unavailable) do
-    "_Unavailable_"
-  end
-
-  defp render_task_list([]) do
-    "_No active tasks_"
-  end
-
-  defp render_task_list(tasks) do
-    tasks
-    |> Enum.take(5)
-    |> Enum.with_index(1)
-    |> Enum.map_join("\n", fn {task, idx} ->
-      title = Map.get(task, "title", "Untitled")
-      "#{idx}. #{title}"
-    end)
   end
 
   defp render_blockers([]) do
@@ -362,34 +355,57 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
     "_Unable to analyze blockers_"
   end
 
-  defp render_inbox(:unavailable) do
+  defp render_daily_tasks([]) do
+    "_None_"
+  end
+
+  defp render_daily_tasks(:unavailable) do
     "_Unavailable_"
   end
 
-  defp render_inbox([]) do
-    "_Inbox clear_"
+  defp render_daily_tasks(tasks) when is_list(tasks) do
+    if Enum.empty?(tasks) do
+      "_None_"
+    else
+      tasks
+      |> Enum.take(5)
+      |> Enum.map_join("\n", fn task ->
+        title = Map.get(task, "title", "Untitled")
+        priority = Map.get(task, "priority", "")
+        due = if Map.get(task, "due_date"), do: " 📅", else: ""
+        priority_icon = if priority == "high", do: "🔴 ", else: ""
+        "#{priority_icon}• #{title}#{due}"
+      end)
+    end
   end
 
-  defp render_inbox(items) do
-    items
-    |> Enum.take(3)
-    |> Enum.map_join("\n", fn item ->
-      text = Map.get(item, "text", "Untitled")
-      "• #{text}"
-    end)
+  defp render_daily_tasks(_) do
+    "_Unable to load tasks_"
   end
 
-  defp render_fitness(:unavailable) do
+  defp render_completed([]) do
+    "_Nothing shipped yet_"
+  end
+
+  defp render_completed(:unavailable) do
     "_Unavailable_"
   end
 
-  defp render_fitness(data) when is_map(data) do
-    status = Map.get(data, "status", "unknown")
-    "Status: #{status}"
+  defp render_completed(tasks) when is_list(tasks) do
+    if Enum.empty?(tasks) do
+      "_Nothing shipped yet_"
+    else
+      tasks
+      |> Enum.take(5)
+      |> Enum.map_join("\n", fn task ->
+        title = Map.get(task, "title", "Untitled")
+        "✅ #{title}"
+      end)
+    end
   end
 
-  defp render_fitness(_) do
-    "_No data_"
+  defp render_completed(_) do
+    "_Unable to load completed tasks_"
   end
 
   defp render_health(:unavailable) do
