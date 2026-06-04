@@ -172,7 +172,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   defp handle_nats_request(msg) do
     response =
-      case msg.subject do
+      case msg.topic do
         "dispatcher.log.errors.top" ->
           %{
             "ok" => true,
