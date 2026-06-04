@@ -282,20 +282,24 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     end
   end
 
+  @tail_lines 500
+
   defp extract_errors_from_file(path, cutoff) do
     bot_name =
       path
       |> Path.basename()
-      |> String.replace(~r/\.(log|err)(\.\d{8}-\d{6})?$/, "")
+      |> String.replace(~r/\.(log|err)$/, "")
 
-    case File.read(path) do
-      {:ok, content} ->
-        do_extract_errors(content, bot_name, cutoff)
+    case System.cmd("tail", ["-n", to_string(@tail_lines), path], stderr_to_stdout: true) do
+      {output, 0} ->
+        do_extract_errors(output, bot_name, cutoff)
 
-      {:error, reason} ->
-        Logger.warning("[LogErrorScanner] Cannot open #{path}: #{inspect(reason)}")
+      {_output, _} ->
+        Logger.warning("[LogErrorScanner] tail failed for #{path}")
         []
     end
+  rescue
+    _ -> []
   end
 
   @dialyzer {:nowarn_function, do_extract_errors: 3}
