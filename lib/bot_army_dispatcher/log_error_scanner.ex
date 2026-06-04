@@ -52,7 +52,12 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   @impl true
   def init(_opts) do
-    :ets.new(@ets, [:named_table, :ordered_set, :public, read_concurrency: true])
+    if :ets.info(@ets) != :undefined do
+      :ets.delete_all_objects(@ets)
+    else
+      :ets.new(@ets, [:named_table, :ordered_set, :public, read_concurrency: true])
+    end
+
     schedule_scan()
     BotArmyRuntime.Registry.register("log_error_scanner", @subjects, @version)
     Logger.info("[LogErrorScanner] Started, scanning every #{@scan_interval_ms}ms")
@@ -121,48 +126,12 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   @impl true
   def handle_call({:top_errors, window_minutes}, _from, state) do
-    cutoff = minutes_ago(window_minutes)
-
-    results =
-      :ets.tab2list(@ets)
-      |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
-      |> Enum.group_by(fn {_ts, signature, _bot} -> signature end)
-      |> Enum.map(fn {signature, entries} ->
-        bots = entries |> Enum.map(fn {_ts, _sig, bot} -> bot end) |> Enum.uniq()
-        first_seen = entries |> Enum.min_by(fn {ts, _, _} -> ts end) |> elem(0)
-        first_ago = NaiveDateTime.diff(NaiveDateTime.utc_now(), first_seen, :second)
-
-        %{
-          "signature" => signature,
-          "count" => length(entries),
-          "bots" => bots,
-          "first_seen_ago_seconds" => first_ago,
-          "first_seen_ago_minutes" => div(first_ago, 60)
-        }
-      end)
-      |> Enum.sort_by(& &1["count"], :desc)
-
-    {:reply, results, state}
+    {:reply, query_top_errors(window_minutes), state}
   end
 
   @impl true
   def handle_call({:recent_errors, window_minutes, limit}, _from, state) do
-    cutoff = minutes_ago(window_minutes)
-
-    results =
-      :ets.tab2list(@ets)
-      |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
-      |> Enum.sort_by(fn {ts, _, _} -> ts end, :desc)
-      |> Enum.take(limit)
-      |> Enum.map(fn {ts, signature, bot} ->
-        %{
-          "timestamp" => NaiveDateTime.to_iso8601(ts),
-          "signature" => signature,
-          "bot" => bot
-        }
-      end)
-
-    {:reply, results, state}
+    {:reply, query_recent_errors(window_minutes, limit), state}
   end
 
   defp schedule_scan do
@@ -227,17 +196,22 @@ defmodule BotArmyDispatcher.LogErrorScanner do
   defp query_top_errors(window_minutes) do
     cutoff = minutes_ago(window_minutes)
 
-    :ets.tab2list(@ets)
-    |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
+    # Use :ets.select to only fetch entries newer than cutoff
+    entries =
+      :ets.select(@ets, [
+        {{:"$1", :"$2", :"$3"}, [{:>=, :"$1", {:const, cutoff}}], [{{:"$1", :"$2", :"$3"}}]}
+      ])
+
+    entries
     |> Enum.group_by(fn {_ts, signature, _bot} -> signature end)
-    |> Enum.map(fn {signature, entries} ->
-      bots = entries |> Enum.map(fn {_ts, _sig, bot} -> bot end) |> Enum.uniq()
-      first_seen = entries |> Enum.min_by(fn {ts, _, _} -> ts end) |> elem(0)
+    |> Enum.map(fn {signature, sig_entries} ->
+      bots = sig_entries |> Enum.map(fn {_ts, _sig, bot} -> bot end) |> Enum.uniq()
+      first_seen = sig_entries |> Enum.min_by(fn {ts, _, _} -> ts end) |> elem(0)
       first_ago = NaiveDateTime.diff(NaiveDateTime.utc_now(), first_seen, :second)
 
       %{
         "signature" => signature,
-        "count" => length(entries),
+        "count" => length(sig_entries),
         "bots" => bots,
         "first_seen_ago_seconds" => first_ago,
         "first_seen_ago_minutes" => div(first_ago, 60)
@@ -249,8 +223,9 @@ defmodule BotArmyDispatcher.LogErrorScanner do
   defp query_recent_errors(window_minutes, limit) do
     cutoff = minutes_ago(window_minutes)
 
-    :ets.tab2list(@ets)
-    |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
+    :ets.select(@ets, [
+      {{:"$1", :"$2", :"$3"}, [{:>=, :"$1", {:const, cutoff}}], [{{:"$1", :"$2", :"$3"}}]}
+    ])
     |> Enum.sort_by(fn {ts, _, _} -> ts end, :desc)
     |> Enum.take(limit)
     |> Enum.map(fn {ts, signature, bot} ->
@@ -295,7 +270,10 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     case File.ls(@log_dir) do
       {:ok, files} ->
         files
-        |> Enum.filter(fn f -> String.ends_with?(f, ".log") || String.ends_with?(f, ".err") end)
+        |> Enum.filter(fn f ->
+          # Match exact .log or .err — NOT rotated logs like .log.20260525-190257
+          String.match?(f, ~r/\.(log|err)$/)
+        end)
         |> Enum.map(&Path.join(@log_dir, &1))
 
       {:error, reason} ->
