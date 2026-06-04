@@ -105,6 +105,7 @@ defmodule BotArmyDispatcher.SystemObserver do
     unhealthy = collect_unhealthy_bots()
     credo = collect_credo_violations()
     ready = collect_ready_to_deploy()
+    log_errors = collect_log_errors()
 
     %{
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -113,7 +114,8 @@ defmodule BotArmyDispatcher.SystemObserver do
       "test_signal_age_hours" => get_test_signal_age(),
       "credo_violations" => credo,
       "ready_to_deploy" => ready,
-      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready)
+      "log_error_priority" => log_errors,
+      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready, log_errors)
     }
   end
 
@@ -331,8 +333,28 @@ defmodule BotArmyDispatcher.SystemObserver do
     end
   end
 
-  defp compute_suggested_focus(blockers, unhealthy, credo, ready) do
+  defp collect_log_errors do
+    # Query LogErrorScanner for top signatures in the last 30 minutes
+    BotArmyDispatcher.LogErrorScanner.top_errors()
+  rescue
+    _ -> []
+  end
+
+  defp compute_suggested_focus(blockers, unhealthy, credo, ready, log_errors) do
+    # Extract highest-priority log error (threshold: 5+ occurrences in 30 min)
+    top_error =
+      log_errors
+      |> Enum.filter(&(&1["count"] >= 5))
+      |> List.first()
+
     cond do
+      # Priority 0: Spiking recurring error signature
+      top_error != nil ->
+        sig = top_error["signature"]
+        count = top_error["count"]
+        bots = Enum.join(top_error["bots"], ", ")
+        "🔥 Log error surge: #{count}× " <> String.slice(sig, 0, 80) <> " in #{bots}"
+
       # Priority 1: Unhealthy bots need immediate attention
       not Enum.empty?(unhealthy) ->
         bot_list = Enum.join(unhealthy, ", ")
@@ -422,6 +444,8 @@ defmodule BotArmyDispatcher.SystemObserver do
     unhealthy_str = if Enum.empty?(unhealthy), do: "_None_", else: Enum.join(unhealthy, ", ")
     credo_str = if Enum.empty?(credo), do: "_None_", else: credo_md(credo)
     ready_str = if Enum.empty?(ready), do: "_None_", else: Enum.join(ready, ", ")
+    log_errors = digest["log_error_priority"] || []
+    log_str = if Enum.empty?(log_errors), do: "_None_", else: log_errors_md(log_errors)
 
     observations_str =
       if Enum.empty?(observations) do
@@ -454,6 +478,9 @@ defmodule BotArmyDispatcher.SystemObserver do
 
     ### Ready to Deploy
     #{ready_str}
+
+    ### Log Error Priority (last 30 min)
+    #{log_str}
     """
   end
 
@@ -505,6 +532,27 @@ defmodule BotArmyDispatcher.SystemObserver do
         end
       end)
 
+    # Check for log error surge (new signature with 5+ occurrences)
+    prev_log = Map.get(previous, "log_error_priority", [])
+    curr_log = Map.get(current, "log_error_priority", [])
+    prev_sigs = prev_log |> Enum.map(& &1["signature"]) |> MapSet.new()
+
+    alerts =
+      curr_log
+      |> Enum.filter(&(&1["count"] >= 5))
+      |> Enum.reduce(alerts, fn e, acc ->
+        if MapSet.member?(prev_sigs, e["signature"]) do
+          acc
+        else
+          bots = Enum.join(e["bots"], ", ")
+
+          [
+            "🔥 New log error surge: #{e["count"]}× in #{bots}: #{String.slice(e["signature"], 0, 80)}"
+            | acc
+          ]
+        end
+      end)
+
     # Send alert if any anomalies detected
     if not Enum.empty?(alerts) do
       publish_discord_alert(alerts)
@@ -537,6 +585,13 @@ defmodule BotArmyDispatcher.SystemObserver do
   defp credo_md(credo) do
     Enum.map_join(credo, "\n", fn {bot, count} ->
       "- #{bot}: #{count} violations"
+    end)
+  end
+
+  defp log_errors_md(errors) do
+    Enum.map_join(errors, "\n", fn e ->
+      bots = Enum.join(e["bots"], ", ")
+      "- #{e["count"]}× #{String.slice(e["signature"], 0, 120)} (#{bots})"
     end)
   end
 end
