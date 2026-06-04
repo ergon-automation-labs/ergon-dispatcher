@@ -177,7 +177,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
           %{
             "ok" => true,
             "data" => %{
-              "errors" => top_errors(),
+              "errors" => query_top_errors(@window_minutes),
               "window_minutes" => @window_minutes
             }
           }
@@ -189,7 +189,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
           %{
             "ok" => true,
             "data" => %{
-              "errors" => recent_errors(@window_minutes, limit),
+              "errors" => query_recent_errors(@window_minutes, limit),
               "window_minutes" => @window_minutes,
               "limit" => limit
             }
@@ -205,6 +205,44 @@ defmodule BotArmyDispatcher.LogErrorScanner do
       Logger.error("[LogErrorScanner] Failed to handle NATS request: #{inspect(e)}")
       error = %{"ok" => false, "error" => "Internal error"} |> Jason.encode!()
       Gnat.pub(msg.gnat, msg.reply_to, error)
+  end
+
+  defp query_top_errors(window_minutes) do
+    cutoff = minutes_ago(window_minutes)
+
+    :ets.tab2list(@ets)
+    |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
+    |> Enum.group_by(fn {_ts, signature, _bot} -> signature end)
+    |> Enum.map(fn {signature, entries} ->
+      bots = entries |> Enum.map(fn {_ts, _sig, bot} -> bot end) |> Enum.uniq()
+      first_seen = entries |> Enum.min_by(fn {ts, _, _} -> ts end) |> elem(0)
+      first_ago = NaiveDateTime.diff(NaiveDateTime.utc_now(), first_seen, :second)
+
+      %{
+        "signature" => signature,
+        "count" => length(entries),
+        "bots" => bots,
+        "first_seen_ago_seconds" => first_ago,
+        "first_seen_ago_minutes" => div(first_ago, 60)
+      }
+    end)
+    |> Enum.sort_by(& &1["count"], :desc)
+  end
+
+  defp query_recent_errors(window_minutes, limit) do
+    cutoff = minutes_ago(window_minutes)
+
+    :ets.tab2list(@ets)
+    |> Enum.filter(fn {ts, _, _} -> NaiveDateTime.compare(ts, cutoff) != :lt end)
+    |> Enum.sort_by(fn {ts, _, _} -> ts end, :desc)
+    |> Enum.take(limit)
+    |> Enum.map(fn {ts, signature, bot} ->
+      %{
+        "timestamp" => NaiveDateTime.to_iso8601(ts),
+        "signature" => signature,
+        "bot" => bot
+      }
+    end)
   end
 
   defp do_scan(state) do
