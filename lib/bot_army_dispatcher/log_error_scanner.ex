@@ -52,7 +52,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   @impl true
   def init(_opts) do
-    :ets.new(@ets, [:named_table, :ordered_set, :protected, read_concurrency: true])
+    :ets.new(@ets, [:named_table, :ordered_set, :public, read_concurrency: true])
     schedule_scan()
     BotArmyRuntime.Registry.register("log_error_scanner", @subjects, @version)
     Logger.info("[LogErrorScanner] Started, scanning every #{@scan_interval_ms}ms")
@@ -89,17 +89,34 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   @impl true
   def handle_info(:scan, state) do
-    new_state =
-      try do
-        do_scan(state)
-      rescue
-        e ->
-          Logger.error("[LogErrorScanner] Scan failed: #{inspect(e)}")
-          state
-      end
+    # Run scan in a Task so NATS handlers stay responsive
+    me = self()
+
+    Task.start(fn ->
+      result =
+        try do
+          {:ok, perform_scan()}
+        rescue
+          e ->
+            {:error, e}
+        end
+
+      send(me, {:scan_complete, result})
+    end)
 
     schedule_scan()
-    {:noreply, new_state}
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:scan_complete, {:ok, {new_count, count_after, _entries}}}, state) do
+    {:noreply, %{state | last_scan: DateTime.utc_now()}}
+  end
+
+  @impl true
+  def handle_info({:scan_complete, {:error, e}}, state) do
+    Logger.error("[LogErrorScanner] Scan failed: #{inspect(e)}")
+    {:noreply, state}
   end
 
   @impl true
@@ -245,7 +262,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     end)
   end
 
-  defp do_scan(state) do
+  defp perform_scan do
     cutoff = minutes_ago(@window_minutes)
     count_before = :ets.info(@ets, :size)
 
@@ -271,7 +288,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
       Logger.debug("[LogErrorScanner] No new errors, ETS size: #{count_after}")
     end
 
-    %{state | last_scan: DateTime.utc_now()}
+    {new_count, count_after, length(entries)}
   end
 
   defp list_log_files do
