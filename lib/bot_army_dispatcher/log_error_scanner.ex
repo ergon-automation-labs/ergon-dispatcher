@@ -172,13 +172,9 @@ defmodule BotArmyDispatcher.LogErrorScanner do
       |> Path.basename()
       |> String.replace(~r/\.(log|err)(\.\d{8}-\d{6})?$/, "")
 
-    case File.open(path, [:read, :binary]) do
-      {:ok, file} ->
-        try do
-          do_extract_errors(IO.read(file, :all), bot_name, cutoff)
-        after
-          File.close(file)
-        end
+    case File.read(path) do
+      {:ok, content} ->
+        do_extract_errors(content, bot_name, cutoff)
 
       {:error, reason} ->
         Logger.warning("[LogErrorScanner] Cannot open #{path}: #{inspect(reason)}")
@@ -186,6 +182,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     end
   end
 
+  @dialyzer {:nowarn_function, do_extract_errors: 3}
   defp do_extract_errors(content, bot_name, cutoff) do
     content
     |> String.split("\n")
@@ -211,6 +208,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
   # Parses lines like:
   #   17:26:40.275 [info] Loading 160 CA(s) from :otp store
   #   17:26:40.275 [error] GenServer terminating: ** (RuntimeError) boom
+  @dialyzer {:nowarn_function, parse_error_line: 1}
   defp parse_error_line(line) do
     case Regex.run(~r/(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})\s+\[(\w+)\]\s+(.*)/, line) do
       [_, h, m, s, ms, level_str, rest] ->
@@ -269,10 +267,12 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     "KeyError"
   ]
 
+  @dialyzer {:nowarn_function, crash_line?: 1}
   defp crash_line?(line) do
     Enum.any?(@crash_prefixes, &String.starts_with?(line, &1))
   end
 
+  @dialyzer {:nowarn_function, normalize_signature: 1}
   defp normalize_signature(line) do
     line
     # Strip timestamp prefix
