@@ -56,7 +56,35 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     schedule_scan()
     BotArmyRuntime.Registry.register("log_error_scanner", @subjects, @version)
     Logger.info("[LogErrorScanner] Started, scanning every #{@scan_interval_ms}ms")
-    {:ok, %{last_scan: nil}}
+    {:ok, %{last_scan: nil, subscriptions: []}, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_continue(:connect, state) do
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+      {:ok, conn} ->
+        subs = setup_subscriptions(conn)
+        {:noreply, %{state | subscriptions: subs}}
+
+      {:error, reason} ->
+        Logger.warning("[LogErrorScanner] NATS not ready: #{inspect(reason)}, retrying...")
+        Process.send_after(self(), :reconnect, 5000)
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:reconnect, state) do
+    {:noreply, state, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_info({:msg, msg}, state) do
+    if Enum.member?(state.subscriptions, msg.sid) do
+      handle_nats_request(msg)
+    end
+
+    {:noreply, state}
   end
 
   @impl true
@@ -122,6 +150,61 @@ defmodule BotArmyDispatcher.LogErrorScanner do
 
   defp schedule_scan do
     Process.send_after(self(), :scan, @scan_interval_ms)
+  end
+
+  defp setup_subscriptions(conn) do
+    subjects = ["dispatcher.log.errors.top", "dispatcher.log.errors.recent"]
+
+    subjects
+    |> Enum.map(fn subject ->
+      case Gnat.sub(conn, self(), subject) do
+        {:ok, sub} ->
+          Logger.info("[LogErrorScanner] Subscribed to #{subject}")
+          sub
+
+        {:error, reason} ->
+          Logger.error("[LogErrorScanner] Failed to subscribe to #{subject}: #{inspect(reason)}")
+          nil
+      end
+    end)
+    |> Enum.filter(&(&1 != nil))
+  end
+
+  defp handle_nats_request(msg) do
+    response =
+      case msg.subject do
+        "dispatcher.log.errors.top" ->
+          %{
+            "ok" => true,
+            "data" => %{
+              "errors" => top_errors(),
+              "window_minutes" => @window_minutes
+            }
+          }
+
+        "dispatcher.log.errors.recent" ->
+          payload = Jason.decode!(msg.body)
+          limit = Map.get(payload, "limit", 50)
+
+          %{
+            "ok" => true,
+            "data" => %{
+              "errors" => recent_errors(@window_minutes, limit),
+              "window_minutes" => @window_minutes,
+              "limit" => limit
+            }
+          }
+
+        _ ->
+          %{"ok" => false, "error" => "Unknown subject"}
+      end
+
+    Gnat.pub(msg.gnat, msg.reply_to, Jason.encode!(response))
+  rescue
+    e ->
+      Logger.error("[LogErrorScanner] Failed to handle NATS request: #{inspect(e)}")
+      error = %{"ok" => false, "error" => "Internal error"} |> Jason.encode!()
+      Gnat.pub(msg.gnat, msg.reply_to, error)
   end
 
   defp do_scan(state) do
