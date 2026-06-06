@@ -26,6 +26,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_incident_responder()
       |> maybe_add_learning_event_handler()
       |> maybe_add_learning_report_scheduler()
+      |> maybe_add_learning_feedback_scheduler()
       |> maybe_add_learning_review_responder()
       |> maybe_add_review_notification_scheduler()
       |> maybe_add_outcome_tracker()
@@ -96,6 +97,12 @@ defmodule BotArmyDispatcher.Application do
     if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.LearningReportScheduler, []} | children]
+  end
+
+  defp maybe_add_learning_feedback_scheduler(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.LearningFeedbackScheduler, []} | children]
   end
 
   defp maybe_add_learning_review_responder(children) do
