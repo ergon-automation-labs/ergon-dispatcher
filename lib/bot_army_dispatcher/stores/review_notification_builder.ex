@@ -9,7 +9,7 @@ defmodule BotArmyDispatcher.Stores.ReviewNotificationBuilder do
   require Logger
   alias BotArmyDispatcher.UserLearning
 
-  def build_review_notification(learnings) when is_list(learnings) and length(learnings) > 0 do
+  def build_review_notification([_ | _] = learnings) do
     %{
       type: "learning_review_reminder",
       title: build_title(learnings),

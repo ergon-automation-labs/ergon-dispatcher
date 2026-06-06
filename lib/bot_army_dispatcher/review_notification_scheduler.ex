@@ -18,7 +18,7 @@ defmodule BotArmyDispatcher.ReviewNotificationScheduler do
   alias BotArmyDispatcher.Stores.ReviewNotificationBuilder
   import Ecto.Query
 
-  @check_interval_ms 3600_000
+  @check_interval_ms 3_600_000
   @max_learnings_per_notification 10
 
   def start_link(opts) do
