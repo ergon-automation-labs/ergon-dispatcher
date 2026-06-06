@@ -556,6 +556,7 @@ defmodule BotArmyDispatcher.SystemObserver do
     # Send alert if any anomalies detected
     if not Enum.empty?(alerts) do
       publish_discord_alert(alerts)
+      publish_briefing_alert(alerts)
     end
   end
 
@@ -574,6 +575,39 @@ defmodule BotArmyDispatcher.SystemObserver do
     }
 
     BotArmyDispatcher.DiscordPublisher.publish_if_allowed(envelope, :high)
+  end
+
+  defp publish_briefing_alert(alerts) do
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+      {:ok, conn} ->
+        Enum.each(alerts, fn alert ->
+          payload =
+            Jason.encode!(%{
+              "event" => "context.briefing.alert",
+              "source" => "bot_army_dispatcher",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+              "alert" => alert,
+              "category" => alert_category(alert)
+            })
+
+          Gnat.pub(conn, "context.briefing.alert", payload)
+        end)
+
+        Logger.info("[SystemObserver] Published #{length(alerts)} briefing alert(s)")
+
+      {:error, e} ->
+        Logger.warning("[SystemObserver] Failed to publish briefing alert: #{inspect(e)}")
+    end
+  end
+
+  defp alert_category(alert) do
+    cond do
+      String.contains?(alert, "🚨") -> "blocker"
+      String.contains?(alert, "🔴") -> "health"
+      String.contains?(alert, "⚠️") -> "quality"
+      String.contains?(alert, "🔥") -> "log_error"
+      true -> "general"
+    end
   end
 
   defp blockers_md(blockers) do
