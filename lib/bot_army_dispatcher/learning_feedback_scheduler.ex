@@ -12,7 +12,7 @@ defmodule BotArmyDispatcher.LearningFeedbackScheduler do
 
   alias BotArmyDispatcher.Stores.LearningFeedbackAnalyzer
 
-  @check_interval_ms 3600_000
+  @check_interval_ms 3_600_000
   @analysis_day_of_week 7
   @analysis_hour 10
 
