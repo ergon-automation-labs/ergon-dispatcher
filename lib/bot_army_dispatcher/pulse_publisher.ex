@@ -65,7 +65,8 @@ defmodule BotArmyDispatcher.PulsePublisher do
       DateTime.diff(DateTime.utc_now() |> DateTime.truncate(:second), started_at, :second)
 
     case BotArmyRuntime.SynapseHealth.publish(
-           source: @envelope_source,
+           source_node: node() |> Atom.to_string(),
+           triggered_by: @envelope_source,
            service: @service_name,
            tenant_id: tenant_id,
            health_signal: signal,
