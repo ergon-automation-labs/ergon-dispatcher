@@ -102,6 +102,7 @@ defmodule BotArmyDispatcher.SystemObserver do
 
   defp synthesize_digest do
     blockers = collect_blockers()
+    stuck = collect_stuck_tasks()
     unhealthy = collect_unhealthy_bots()
     credo = collect_credo_violations()
     ready = collect_ready_to_deploy()
@@ -110,12 +111,14 @@ defmodule BotArmyDispatcher.SystemObserver do
     %{
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "blockers" => blockers,
+      "stuck_tasks" => stuck,
       "unhealthy_bots" => unhealthy,
       "test_signal_age_hours" => get_test_signal_age(),
       "credo_violations" => credo,
       "ready_to_deploy" => ready,
       "log_error_priority" => log_errors,
-      "suggested_focus" => compute_suggested_focus(blockers, unhealthy, credo, ready, log_errors)
+      "suggested_focus" =>
+        compute_suggested_focus(blockers, stuck, unhealthy, credo, ready, log_errors)
     }
   end
 
@@ -136,6 +139,38 @@ defmodule BotArmyDispatcher.SystemObserver do
       {:error, _reason} ->
         Logger.warning("[SystemObserver] Failed to fetch blockers")
         []
+    end
+  end
+
+  defp collect_stuck_tasks do
+    case nats_request("bridge.task.search", %{
+           "filters" => %{"status" => "doing", "created_before_days" => 3}
+         }) do
+      {:ok, response} ->
+        response
+        |> Map.get("data", %{})
+        |> Map.get("tasks", [])
+        |> Enum.map(fn task ->
+          %{
+            "task_id" => Map.get(task, "id"),
+            "task_title" => Map.get(task, "title"),
+            "days_in_progress" => days_since(Map.get(task, "updated_at")),
+            "suggestion" => "Consider breaking this down or asking LLM to decompose"
+          }
+        end)
+
+      {:error, _reason} ->
+        Logger.warning("[SystemObserver] Failed to fetch stuck tasks")
+        []
+    end
+  end
+
+  defp days_since(nil), do: nil
+
+  defp days_since(iso_string) when is_binary(iso_string) do
+    case DateTime.from_iso8601(iso_string) do
+      {:ok, dt} -> Date.diff(Date.utc_today(), DateTime.to_date(dt))
+      _ -> nil
     end
   end
 
@@ -340,7 +375,7 @@ defmodule BotArmyDispatcher.SystemObserver do
     _ -> []
   end
 
-  defp compute_suggested_focus(blockers, unhealthy, credo, ready, log_errors) do
+  defp compute_suggested_focus(blockers, stuck, unhealthy, credo, ready, log_errors) do
     # Extract highest-priority log error (threshold: 5+ occurrences in 30 min)
     top_error =
       log_errors
@@ -364,13 +399,19 @@ defmodule BotArmyDispatcher.SystemObserver do
       length(blockers) > 5 ->
         "🚨 High blocker surge: #{length(blockers)} tasks blocked — unblock high-priority first"
 
-      # Priority 3: Significant code quality degradation
+      # Priority 3: Stuck tasks >3 days without progress
+      not Enum.empty?(stuck) ->
+        worst = List.first(stuck)
+
+        "🐌 Stuck task: #{worst["task_title"]} (#{worst["days_in_progress"]} days) — #{worst["suggestion"]}"
+
+      # Priority 4: Significant code quality degradation
       Enum.any?(credo, fn {_bot, count} -> count > 15 end) ->
         worst = Enum.max_by(credo, fn {_bot, count} -> count end)
         {bot, count} = worst
         "⚠️  Code quality: #{bot} has #{count} violations — fix strictest first"
 
-      # Priority 4: Deployments ready to ship
+      # Priority 5: Deployments ready to ship
       not Enum.empty?(ready) ->
         "🚀 Ready to deploy: #{Enum.join(ready, ", ")} — test & publish"
 
@@ -433,19 +474,25 @@ defmodule BotArmyDispatcher.SystemObserver do
 
   defp format_digest_for_para(digest) do
     timestamp = digest["timestamp"]
-    blockers = digest["blockers"]
-    unhealthy = digest["unhealthy_bots"]
-    credo = digest["credo_violations"]
-    ready = digest["ready_to_deploy"]
     focus = digest["suggested_focus"]
     observations = digest["observations"] || []
 
-    blockers_str = if Enum.empty?(blockers), do: "_None_", else: blockers_md(blockers)
-    unhealthy_str = if Enum.empty?(unhealthy), do: "_None_", else: Enum.join(unhealthy, ", ")
-    credo_str = if Enum.empty?(credo), do: "_None_", else: credo_md(credo)
-    ready_str = if Enum.empty?(ready), do: "_None_", else: Enum.join(ready, ", ")
-    log_errors = digest["log_error_priority"] || []
-    log_str = if Enum.empty?(log_errors), do: "_None_", else: log_errors_md(log_errors)
+    sections = [
+      {"Blockers", digest["blockers"], &blockers_md/1, &list_or_none/1},
+      {"Stuck Tasks (>3 days in progress)", digest["stuck_tasks"], &stuck_md/1, &list_or_none/1},
+      {"Unhealthy Bots", digest["unhealthy_bots"], &Enum.join(&1, ", "), &list_or_none/1},
+      {"Code Quality (Credo Violations)", digest["credo_violations"], &credo_md/1,
+       &map_or_none/1},
+      {"Ready to Deploy", digest["ready_to_deploy"], &Enum.join(&1, ", "), &list_or_none/1},
+      {"Log Error Priority (last 30 min)", digest["log_error_priority"], &log_errors_md/1,
+       &list_or_none/1}
+    ]
+
+    details =
+      sections
+      |> Enum.map_join("\n\n", fn {title, data, formatter, or_none} ->
+        "### #{title}\n#{format_section(data, formatter, or_none)}"
+      end)
 
     observations_str =
       if Enum.empty?(observations) do
@@ -467,22 +514,18 @@ defmodule BotArmyDispatcher.SystemObserver do
 
     ## Details
 
-    ### Blockers
-    #{blockers_str}
-
-    ### Unhealthy Bots
-    #{unhealthy_str}
-
-    ### Code Quality (Credo Violations)
-    #{credo_str}
-
-    ### Ready to Deploy
-    #{ready_str}
-
-    ### Log Error Priority (last 30 min)
-    #{log_str}
+    #{details}
     """
   end
+
+  defp format_section(nil, _formatter, or_none), do: or_none.([])
+  defp format_section(data, formatter, or_none), do: or_none.(data, formatter)
+
+  defp list_or_none([]), do: "_None_"
+  defp list_or_none(data, formatter), do: formatter.(data)
+
+  defp map_or_none(%{} = m) when map_size(m) == 0, do: "_None_"
+  defp map_or_none(data, formatter), do: formatter.(data)
 
   defp detect_and_alert_anomalies(nil, _current), do: :ok
 
@@ -553,6 +596,25 @@ defmodule BotArmyDispatcher.SystemObserver do
         end
       end)
 
+    # Check for stuck task surge (new stuck task with 4+ days in progress)
+    prev_stuck = Map.get(previous, "stuck_tasks", [])
+    curr_stuck = Map.get(current, "stuck_tasks", [])
+    prev_stuck_ids = prev_stuck |> Enum.map(& &1["task_id"]) |> MapSet.new()
+
+    alerts =
+      curr_stuck
+      |> Enum.filter(&(&1["days_in_progress"] >= 4))
+      |> Enum.reduce(alerts, fn t, acc ->
+        if MapSet.member?(prev_stuck_ids, t["task_id"]) do
+          acc
+        else
+          [
+            "🐌 New stuck task: #{t["task_title"]} (#{t["days_in_progress"]} days) — consider decomposition"
+            | acc
+          ]
+        end
+      end)
+
     # Send alert if any anomalies detected
     if not Enum.empty?(alerts) do
       publish_discord_alert(alerts)
@@ -606,6 +668,7 @@ defmodule BotArmyDispatcher.SystemObserver do
       String.contains?(alert, "🔴") -> "health"
       String.contains?(alert, "⚠️") -> "quality"
       String.contains?(alert, "🔥") -> "log_error"
+      String.contains?(alert, "🐌") -> "stuck"
       true -> "general"
     end
   end
@@ -613,6 +676,12 @@ defmodule BotArmyDispatcher.SystemObserver do
   defp blockers_md(blockers) do
     Enum.map_join(blockers, "\n", fn b ->
       "- **#{b["task_title"]}** (#{b["task_id"]}) blocked by #{b["blocked_by"]}"
+    end)
+  end
+
+  defp stuck_md(stuck) do
+    Enum.map_join(stuck, "\n", fn t ->
+      "- **#{t["task_title"]}** (#{t["task_id"]}) — #{t["days_in_progress"]} days — #{t["suggestion"]}"
     end)
   end
 
