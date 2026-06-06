@@ -12,7 +12,7 @@ defmodule BotArmyDispatcher.Handlers.LearningEventHandler do
   use GenServer
   require Logger
 
-  alias BotArmyDispatcher.Stores.UserLearningStore
+  alias BotArmyDispatcher.Stores.{UserLearningStore, InsightsExtractor}
   alias BotArmyRuntime.NATS.Connection
 
   @reconnect_delay_ms 5000
@@ -107,6 +107,11 @@ defmodule BotArmyDispatcher.Handlers.LearningEventHandler do
           {:ok, learning} ->
             Logger.info("[LearningEventHandler] Captured learning #{learning.id}")
             publish_learning_signal(learning)
+
+            # Trigger insights analysis in background (non-blocking)
+            spawn_link(fn ->
+              InsightsExtractor.analyze_learning(learning)
+            end)
 
           {:error, reason} ->
             Logger.error("[LearningEventHandler] Failed to capture learning: #{inspect(reason)}")
