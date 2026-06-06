@@ -104,10 +104,13 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
   end
 
   defp build_recommendations(learnings) do
+    hard_count = learnings |> Enum.count(&(&1.difficulty_level == "hard"))
+    has_mistakes = learnings |> Enum.any?(& &1.mistakes_made)
+
     [
-      "Review #{Enum.count(Enum.filter(learnings, &(&1.difficulty_level == "hard")))} hard learnings within 1 day",
+      "Review #{hard_count} hard learnings within 1 day",
       "Schedule follow-up practice for patterns: #{extract_patterns(learnings) |> Enum.join(", ")}",
-      if(Enum.count(Enum.filter(learnings, & &1.mistakes_made)) > 0,
+      if(has_mistakes,
         do: "Common mistakes identified—review error patterns before similar tasks",
         else: nil
       )
@@ -118,6 +121,8 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
   defp publish_report(report) do
     case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 1000) do
       {:ok, conn} ->
+        has_high_risk = not Enum.empty?(report.high_risk_learnings)
+
         signal = %{
           type: "daily_learning_report",
           date: report.date,
@@ -125,7 +130,7 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
           summary: report.summary,
           pattern_count: Enum.count(report.patterns),
           recommendations: report.recommendations,
-          has_high_risk: Enum.count(report.high_risk_learnings) > 0,
+          has_high_risk: has_high_risk,
           report_json: Jason.encode!(report)
         }
 

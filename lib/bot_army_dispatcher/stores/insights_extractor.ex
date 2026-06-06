@@ -32,27 +32,23 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
 
   defp cluster_similar_learnings(learning) do
     cutoff_time = DateTime.add(DateTime.utc_now(), -@lookback_hours * 3600, :second)
+    difficulty = learning.difficulty_level
 
-    query =
-      from(l in UserLearning,
-        where:
-          l.created_at > ^cutoff_time and
-            l.id != ^learning.id and
-            (l.difficulty_level == ^learning.difficulty_level or
-               (l.difficulty_level == "medium" and ^learning.difficulty_level in ["easy", "hard"]) or
-               (l.difficulty_level == "easy" and ^learning.difficulty_level in ["medium"]) or
-               (l.difficulty_level == "hard" and ^learning.difficulty_level in ["medium"])),
-        order_by: [desc: l.created_at],
-        limit: @cluster_size
+    cluster =
+      Repo.all(
+        from(l in UserLearning,
+          where:
+            l.created_at > ^cutoff_time and
+              l.id != ^learning.id and
+              (l.difficulty_level == ^difficulty or
+                 (^difficulty == "medium" and l.difficulty_level in ["easy", "hard"]) or
+                 (^difficulty in ["easy", "hard"] and l.difficulty_level == "medium")),
+          order_by: [desc: l.created_at],
+          limit: @cluster_size
+        )
       )
 
-    cluster = Repo.all(query)
-
-    if Enum.empty?(cluster) do
-      []
-    else
-      [learning | cluster]
-    end
+    if Enum.empty?(cluster), do: [], else: [learning | cluster]
   end
 
   defp analyze_cluster(learning, cluster) do
@@ -74,9 +70,7 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
 
   defp build_analysis_prompt(learning, cluster) do
     learnings_text =
-      [learning | cluster]
-      |> Enum.map(&format_learning_for_analysis/1)
-      |> Enum.join("\n\n")
+      Enum.map_join([learning | cluster], "\n\n", &format_learning_for_analysis/1)
 
     """
     Analyze these user learnings for patterns, insights, and recommendations:
