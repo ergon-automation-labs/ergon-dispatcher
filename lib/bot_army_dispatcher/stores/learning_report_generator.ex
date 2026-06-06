@@ -14,7 +14,8 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
   def generate_daily_report do
     Logger.info("[LearningReportGenerator] Generating daily learning report")
 
-    today_start = DateTime.now!("UTC") |> DateTime.beginning_of_day()
+    today = DateTime.now!("UTC") |> DateTime.to_date()
+    {:ok, today_start} = DateTime.new(today, ~T[00:00:00], "UTC")
     today_end = DateTime.add(today_start, 24 * 3600, :second)
 
     learnings =

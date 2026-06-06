@@ -43,15 +43,8 @@ defmodule BotArmyDispatcher.LearningReportScheduler do
 
     if should_run_report?(state.last_report_date, now) do
       Logger.info("[LearningReportScheduler] Running daily report generation")
-
-      case LearningReportGenerator.generate_daily_report() do
-        {:ok, report} ->
-          Logger.info("[LearningReportScheduler] Report generated successfully")
-
-        {:error, reason} ->
-          Logger.error("[LearningReportScheduler] Report generation failed: #{inspect(reason)}")
-      end
-
+      {:ok, _report} = LearningReportGenerator.generate_daily_report()
+      Logger.info("[LearningReportScheduler] Report generated successfully")
       state = %{state | last_report_date: today}
     end
 

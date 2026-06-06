@@ -169,7 +169,7 @@ defmodule BotArmyDispatcher.SystemObserver do
 
   defp days_since(iso_string) when is_binary(iso_string) do
     case DateTime.from_iso8601(iso_string) do
-      {:ok, dt} -> Date.diff(Date.utc_today(), DateTime.to_date(dt))
+      {:ok, dt, _offset} -> Date.diff(Date.utc_today(), DateTime.to_date(dt))
       _ -> nil
     end
   end

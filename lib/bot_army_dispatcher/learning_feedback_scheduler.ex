@@ -44,15 +44,8 @@ defmodule BotArmyDispatcher.LearningFeedbackScheduler do
 
     if should_run_analysis?(state.last_analysis_date, now) do
       Logger.info("[LearningFeedbackScheduler] Running weekly feedback analysis")
-
-      case LearningFeedbackAnalyzer.analyze_recent_learnings() do
-        {:ok, analysis} ->
-          Logger.info("[LearningFeedbackScheduler] Feedback analysis complete")
-
-        {:error, reason} ->
-          Logger.error("[LearningFeedbackScheduler] Analysis failed: #{inspect(reason)}")
-      end
-
+      {:ok, _analysis} = LearningFeedbackAnalyzer.analyze_recent_learnings()
+      Logger.info("[LearningFeedbackScheduler] Feedback analysis complete")
       state = %{state | last_analysis_date: DateTime.to_date(now)}
     end
 

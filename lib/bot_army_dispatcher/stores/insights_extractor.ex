@@ -92,13 +92,20 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
   end
 
   defp format_learning_for_analysis(learning) do
+    insights =
+      if Enum.empty?(learning.key_insights),
+        do: "none",
+        else: Enum.join(learning.key_insights, ", ")
+
+    tags = if Enum.empty?(learning.tags), do: "none", else: Enum.join(learning.tags, ", ")
+
     """
     Task: #{learning.task_title}
     Difficulty: #{learning.difficulty_level}
     What Learned: #{learning.what_learned}
     Mistakes: #{learning.mistakes_made || "none"}
-    Insights: #{Enum.join(learning.key_insights, ", ") || "none"}
-    Tags: #{Enum.join(learning.tags, ", ") || "none"}
+    Insights: #{insights}
+    Tags: #{tags}
     """
   end
 
