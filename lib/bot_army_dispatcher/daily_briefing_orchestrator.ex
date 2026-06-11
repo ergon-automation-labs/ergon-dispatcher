@@ -37,6 +37,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   @gtd_timeout_ms 5_000
   @bridge_timeout_ms 5_000
   @fitness_timeout_ms 5_000
+  @wife_care_timeout_ms 5_000
   @health_timeout_ms 5_000
 
   # API
@@ -125,13 +126,20 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   # Parallel fan-out
 
   defp fetch_all_sections do
-    tasks = %{
+    base_tasks = %{
       gtd_next: Task.async(fn -> fetch_gtd_whats_next() end),
       active_tasks: Task.async(fn -> fetch_active_tasks() end),
       inbox_tasks: Task.async(fn -> fetch_inbox_tasks() end),
       fitness: Task.async(fn -> fetch_fitness_today() end),
       health_digest: Task.async(fn -> fetch_health_digest() end)
     }
+
+    tasks =
+      if wife_care_enabled?() do
+        Map.put(base_tasks, :wife_care, Task.async(fn -> fetch_wife_care_digest() end))
+      else
+        base_tasks
+      end
 
     Map.new(tasks, fn {key, task} ->
       result =
@@ -153,6 +161,10 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
 
       {key, result}
     end)
+  end
+
+  defp wife_care_enabled? do
+    System.get_env("INCLUDE_WIFE_CARE_DIGEST", "1") in ["1", "true", "yes"]
   end
 
   # NATS fetchers
@@ -265,6 +277,35 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       :unavailable
   end
 
+  defp fetch_wife_care_digest do
+    case BotArmyRuntime.NATS.Publisher.request("wife_care.gtd_hook.refresh", %{},
+           timeout_ms: @wife_care_timeout_ms
+         ) do
+      {:ok, %{"ok" => true, "data" => %{"digest_summary" => summary}}} ->
+        summary
+
+      {:ok, %{"ok" => true, "data" => digest_data}} ->
+        digest_data
+
+      {:ok, _other} ->
+        :unavailable
+
+      {:error, reason} ->
+        Logger.warning(
+          "[DailyBriefingOrchestrator] wife_care.gtd_hook.refresh failed: #{inspect(reason)}"
+        )
+
+        :unavailable
+    end
+  rescue
+    e ->
+      Logger.warning(
+        "[DailyBriefingOrchestrator] wife_care.gtd_hook.refresh crashed: #{inspect(e)}"
+      )
+
+      :unavailable
+  end
+
   defp fetch_health_digest do
     tenant_id =
       System.get_env("BOT_ARMY_TENANT_ID") || "00000000-0000-0000-0000-000000000001"
@@ -299,6 +340,17 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
     date_label = format_date(generated_at)
     time_label = format_time(generated_at)
 
+    wife_care_section =
+      if Map.has_key?(sections, :wife_care) do
+        """
+
+        ## Louiza Care
+        #{render_wife_care(sections.wife_care)}
+        """
+      else
+        ""
+      end
+
     """
     # Daily Briefing — #{date_label}
 
@@ -316,7 +368,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
 
     ## Wellness
     #{render_fitness(sections.fitness)}
-
+    #{wife_care_section}
     ## System
     #{render_health(sections.health_digest)}
 
@@ -403,6 +455,25 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
     else
       "**#{type}**"
     end
+  end
+
+  defp render_wife_care(:unavailable) do
+    "_Care digest unavailable_"
+  end
+
+  defp render_wife_care(digest) when is_map(digest) do
+    Map.get(digest, "summary") ||
+      Map.get(digest, "digest_summary") ||
+      Map.get(digest, "items", [])
+      |> case do
+        [] -> "_No care items_"
+        items when is_list(items) -> Enum.map_join(items, "\n", &"- #{&1}")
+        other -> inspect(other)
+      end
+  end
+
+  defp render_wife_care(_) do
+    "_No care digest available_"
   end
 
   defp render_health(:unavailable) do

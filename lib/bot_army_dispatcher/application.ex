@@ -30,6 +30,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_learning_review_responder()
       |> maybe_add_review_notification_scheduler()
       |> maybe_add_fitness_reminder_scheduler()
+      |> maybe_add_wife_care_reminder_scheduler()
       |> maybe_add_outcome_tracker()
       |> maybe_add_optimization_scheduler()
       |> maybe_add_learning()
@@ -122,6 +123,12 @@ defmodule BotArmyDispatcher.Application do
     if env() == :test,
       do: children,
       else: [{BotArmyDispatcher.FitnessReminderScheduler, []} | children]
+  end
+
+  defp maybe_add_wife_care_reminder_scheduler(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.WifeCareReminderScheduler, []} | children]
   end
 
   defp maybe_add_outcome_tracker(children) do
