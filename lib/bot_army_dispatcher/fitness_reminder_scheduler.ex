@@ -63,7 +63,7 @@ defmodule BotArmyDispatcher.FitnessReminderScheduler do
                "bot_army.fitness.intent.suggest_workout",
                intent
              ) do
-          :ok ->
+          {:ok, _} ->
             Logger.info("[FitnessReminderScheduler] Fitness reminder published")
             {:noreply, %{state | last_sent_date: today}, {:continue, :schedule_reminder}}
 

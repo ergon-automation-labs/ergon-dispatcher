@@ -63,7 +63,7 @@ defmodule BotArmyDispatcher.WifeCareReminderScheduler do
                "bot_army.wife_care.intent.refresh_digest",
                intent
              ) do
-          :ok ->
+          {:ok, _} ->
             Logger.info("[WifeCareReminderScheduler] Wife care reminder published")
             {:noreply, %{state | last_sent_date: today}, {:continue, :schedule_reminder}}
 
