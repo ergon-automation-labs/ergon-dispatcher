@@ -130,16 +130,13 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       gtd_next: Task.async(fn -> fetch_gtd_whats_next() end),
       active_tasks: Task.async(fn -> fetch_active_tasks() end),
       inbox_tasks: Task.async(fn -> fetch_inbox_tasks() end),
-      fitness: Task.async(fn -> fetch_fitness_today() end),
       health_digest: Task.async(fn -> fetch_health_digest() end)
     }
 
     tasks =
-      if wife_care_enabled?() do
-        Map.put(base_tasks, :wife_care, Task.async(fn -> fetch_wife_care_digest() end))
-      else
-        base_tasks
-      end
+      base_tasks
+      |> maybe_add_fitness_task()
+      |> maybe_add_wife_care_task()
 
     Map.new(tasks, fn {key, task} ->
       result =
@@ -161,6 +158,26 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
 
       {key, result}
     end)
+  end
+
+  defp maybe_add_fitness_task(tasks) do
+    if fitness_enabled?() do
+      Map.put(tasks, :fitness, Task.async(fn -> fetch_fitness_today() end))
+    else
+      tasks
+    end
+  end
+
+  defp maybe_add_wife_care_task(tasks) do
+    if wife_care_enabled?() do
+      Map.put(tasks, :wife_care, Task.async(fn -> fetch_wife_care_digest() end))
+    else
+      tasks
+    end
+  end
+
+  defp fitness_enabled? do
+    System.get_env("INCLUDE_FITNESS_DIGEST", "1") in ["1", "true", "yes"]
   end
 
   defp wife_care_enabled? do
@@ -340,6 +357,17 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
     date_label = format_date(generated_at)
     time_label = format_time(generated_at)
 
+    fitness_section =
+      if Map.has_key?(sections, :fitness) do
+        """
+
+        ## Wellness
+        #{render_fitness(sections.fitness)}
+        """
+      else
+        ""
+      end
+
     wife_care_section =
       if Map.has_key?(sections, :wife_care) do
         """
@@ -365,9 +393,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
 
     ## Inbox
     #{render_inbox(sections.inbox_tasks)}
-
-    ## Wellness
-    #{render_fitness(sections.fitness)}
+    #{fitness_section}
     #{wife_care_section}
     ## System
     #{render_health(sections.health_digest)}
