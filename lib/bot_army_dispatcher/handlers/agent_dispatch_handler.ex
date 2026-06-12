@@ -131,7 +131,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       "[AgentDispatchHandler] Dispatching to AI: event_id=#{context.event_id} topic=#{context.topic}"
     )
 
-    case BotArmyRuntime.NATS.Publisher.publish("bridge.agent.dispatch", envelope) do
+    case BotArmyCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[AgentDispatchHandler] AI dispatch succeeded: event_id=#{context.event_id}")
 
@@ -184,7 +184,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       "[AgentDispatchHandler] Escalating to human: event_id=#{context.event_id} topic=#{context.topic} severity=#{context.severity}"
     )
 
-    case BotArmyRuntime.NATS.Publisher.publish("bridge.task.create", envelope) do
+    case BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
       {:ok, _} ->
         Logger.info(
           "[AgentDispatchHandler] Human escalation task created: event_id=#{context.event_id}"

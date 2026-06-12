@@ -54,7 +54,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyRuntime.NATS.Publisher.publish("bridge.agent.dispatch", envelope) do
+    case BotArmyCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[SelfHealHandler] AI dispatch succeeded for #{target_bot}")
 
@@ -194,7 +194,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyRuntime.NATS.Publisher.publish("bridge.task.create", envelope) do
+    case BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
       {:ok, _} ->
         Logger.warning("[SelfHealHandler] Human escalation task created for #{target_bot}")
         publish_audit_event(target_bot, intent_id, :escalated)

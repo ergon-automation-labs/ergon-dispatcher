@@ -45,7 +45,7 @@ defmodule BotArmyDispatcher.DiscordPublisher do
       end
 
     if notification_allowed? do
-      case BotArmyRuntime.NATS.Publisher.publish("bridge.discord.message.send", envelope) do
+      case BotArmyCore.IntegrationGates.bridge_publish("bridge.discord.message.send", envelope) do
         {:ok, _} ->
           Logger.info("[DiscordPublisher] Discord message published")
 
