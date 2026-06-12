@@ -187,7 +187,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   # NATS fetchers
 
   defp fetch_gtd_whats_next do
-    case BotArmyRuntime.NATS.Publisher.request("gtd.whats_next", %{}, timeout_ms: @gtd_timeout_ms) do
+    case BotArmyDispatcher.GTDClient.request("gtd.whats_next", %{}, timeout_ms: @gtd_timeout_ms) do
       {:ok, %{"data" => %{"tasks" => tasks}}} ->
         tasks
 

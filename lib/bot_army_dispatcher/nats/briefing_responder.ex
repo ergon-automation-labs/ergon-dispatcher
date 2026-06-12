@@ -137,7 +137,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_whats_next(tenant_id) do
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyDispatcher.GTDClient.request(
            "gtd.whats_next",
            %{"tenant_id" => tenant_id, "include" => ["tasks", "projects", "goals"]},
            timeout_ms: 5_000
@@ -264,7 +264,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_blockers(tenant_id) do
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyDispatcher.GTDClient.request(
            "gtd.task.list",
            %{
              "tenant_id" => tenant_id,
