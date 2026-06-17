@@ -303,7 +303,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
       "payload" => task_payload
     }
 
-    BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.task.create", envelope)
+    BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope)
   rescue
     _ -> :ok
   end

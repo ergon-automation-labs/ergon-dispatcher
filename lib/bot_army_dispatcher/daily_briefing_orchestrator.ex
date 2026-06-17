@@ -211,7 +211,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       "limit" => 10
     }
 
-    case BotArmyLibraryCore.IntegrationGates.bridge_request("bridge.task.search", payload,
+    case BotArmyCore.IntegrationGates.bridge_request("bridge.task.search", payload,
            timeout_ms: @bridge_timeout_ms
          ) do
       {:ok, %{"data" => %{"tasks" => tasks}}} ->
@@ -242,7 +242,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       "limit" => 10
     }
 
-    case BotArmyLibraryCore.IntegrationGates.bridge_request("bridge.task.search", payload,
+    case BotArmyCore.IntegrationGates.bridge_request("bridge.task.search", payload,
            timeout_ms: @bridge_timeout_ms
          ) do
       {:ok, %{"data" => %{"tasks" => tasks}}} ->
