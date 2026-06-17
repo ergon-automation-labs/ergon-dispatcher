@@ -254,7 +254,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_health_digest do
-    case BotArmyCore.IntegrationGates.dispatcher_request("dispatcher.system.health", %{}, timeout_ms: 5_000) do
+    case BotArmyLibraryCore.IntegrationGates.dispatcher_request("dispatcher.system.health", %{}, timeout_ms: 5_000) do
       {:ok, %{"data" => data}} ->
         data
 
