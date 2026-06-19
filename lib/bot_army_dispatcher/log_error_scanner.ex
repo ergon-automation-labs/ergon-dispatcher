@@ -290,6 +290,23 @@ defmodule BotArmyDispatcher.LogErrorScanner do
       |> Path.basename()
       |> String.replace(~r/\.(log|err)$/, "")
 
+    # Skip files not modified in the scan window (avoids rescanning stale rotated logs)
+    case File.stat(path) do
+      {:ok, stat} ->
+        if NaiveDateTime.from_erl!(stat.mtime) |> NaiveDateTime.compare(cutoff) == :lt do
+          []
+        else
+          scan_file(path, bot_name, cutoff)
+        end
+
+      {:error, _} ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp scan_file(path, bot_name, cutoff) do
     case System.cmd("tail", ["-n", to_string(@tail_lines), path], stderr_to_stdout: true) do
       {output, 0} ->
         do_extract_errors(output, bot_name, cutoff)
@@ -298,8 +315,6 @@ defmodule BotArmyDispatcher.LogErrorScanner do
         Logger.warning("[LogErrorScanner] tail failed for #{path}")
         []
     end
-  rescue
-    _ -> []
   end
 
   @dialyzer {:nowarn_function, do_extract_errors: 3}
