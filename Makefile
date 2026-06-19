@@ -101,7 +101,26 @@ release: check
 	@echo "Location: _build/prod/rel/dispatcher_bot/"
 	@echo ""
 
+test-release-smoke:
+	@echo "==============================================="
+	@echo "Running release smoke test"
+	@echo "==============================================="
+	@RELEASE_NAME=dispatcher_bot NATS_SERVERS=nats://localhost:4224 \
+		bash $(SCRIPTS_DIRECTORY)/test_release_smoke.sh
+
+# Detect if branch touches responder, NATS consumer, or bridge envelope code.
+# Used as a gate in publish-release to require integration tests.
+HAS_RESPONDER_CHANGES := $(shell git diff --name-only origin/main 2>/dev/null | grep -qE 'lib/.*/(responders|nats|consumers)/|lib/.*/bridge.*\.ex|lib/.*/event.*\.ex' && echo 1 || echo 0)
+
 publish-release: release
+	@if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
+		echo "🔒 Responder/NATS/bridge changes detected. Integration tests required before publish."; \
+		$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
+		echo "✅ Integration tests passed."; \
+	else \
+		[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)"; \
+	fi
+	@$(MAKE) test-release-smoke
 	@echo "==============================================="
 	@echo "Publishing release to GitHub"
 	@echo "==============================================="
