@@ -284,7 +284,7 @@ defmodule BotArmyDispatcher.DailyReflectionOrchestrator do
         date = DateTime.to_date(datetime)
         Date.compare(date, start_date) != :lt && Date.compare(date, end_date) == :lt
 
-      :error ->
+      {:error, _} ->
         false
     end
   end
