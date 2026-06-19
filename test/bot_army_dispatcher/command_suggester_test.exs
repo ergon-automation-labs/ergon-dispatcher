@@ -218,7 +218,7 @@ defmodule BotArmyDispatcher.CommandSuggesterTest do
           context: "post_edit"
         })
 
-      assert Enum.count(suggestions) >= 1
+      assert not Enum.empty?(suggestions)
     end
   end
 end

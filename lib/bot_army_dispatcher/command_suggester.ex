@@ -64,7 +64,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
   # Version bump suggestion
   # If real changes were made and mix.exs wasn't updated, suggest bumping version
   defp suggest_version_bump(%{changed_files: files, pwd: pwd}) do
-    real_changes = Enum.any?(files, &is_real_change/1)
+    real_changes = Enum.any?(files, &real_change?/1)
     mix_file_changed = Enum.any?(files, &String.match?(&1, ~r/mix\.exs$/))
 
     if real_changes && !mix_file_changed do
@@ -98,7 +98,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
           command: "make test",
           reason: "Test file changed. Re-run tests.",
           priority: :high,
-          estimated_time_ms: 15000
+          estimated_time_ms: 15_000
         }
 
       # Store file changed → run storage tests
@@ -107,7 +107,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
           command: "make test-stores",
           reason: "Store files changed. Run storage tests.",
           priority: :high,
-          estimated_time_ms: 10000
+          estimated_time_ms: 10_000
         }
 
       # Any other source change on post_edit → suggest tests
@@ -116,7 +116,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
           command: "make test",
           reason: "Source file changed. Run tests to verify.",
           priority: :medium,
-          estimated_time_ms: 15000
+          estimated_time_ms: 15_000
         }
 
       true ->
@@ -168,7 +168,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
         command: "make publish-release",
         reason: "Version bumped on main. Publish to GitHub releases.",
         priority: :critical,
-        estimated_time_ms: 15000
+        estimated_time_ms: 15_000
       }
     end
   end
@@ -189,7 +189,7 @@ defmodule BotArmyDispatcher.CommandSuggester do
   defp suggest_git_status(_), do: nil
 
   # Helper: is this a real change (not just version bump, docs, or meta files)?
-  defp is_real_change(file) do
+  defp real_change?(file) do
     not String.match?(file, ~r/(mix\.exs|CHANGELOG|\.lock|\.md|\.txt|docs\/)$/)
   end
 

@@ -185,12 +185,6 @@ defmodule BotArmyDispatcher.Handlers.CommandSuggesterResponder do
   defp parse_request(_), do: {:error, "Invalid request body"}
 
   defp send_reply(state, reply_to, response) do
-    case Gnat.pub(state.conn, reply_to, Jason.encode!(response)) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("[CommandSuggesterResponder] Failed to send reply: #{inspect(reason)}")
-    end
+    Gnat.pub(state.conn, reply_to, Jason.encode!(response))
   end
 end
