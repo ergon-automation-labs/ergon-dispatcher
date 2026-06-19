@@ -190,6 +190,18 @@ publish-release-force:
 push-and-publish:
 	@git push && $(MAKE) publish-release
 
+test-integration-report:
+	@echo "=================================================="
+	@echo "Running integration tests with reporting"
+	@echo "=================================================="
+	@REPO_NAME=dispatcher bash $(SCRIPTS_DIRECTORY)/test_integration_report.sh
+
+create-test-failure-tasks:
+	@echo "=================================================="
+	@echo "Creating GTD tasks for test failures"
+	@echo "=================================================="
+	@bash $(SCRIPTS_DIRECTORY)/create_test_failure_tasks.sh dispatcher
+
 logs:
 	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh
 
