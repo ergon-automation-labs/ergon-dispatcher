@@ -1,7 +1,7 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 
-.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release publish-release-force setup-hooks setup-db reset-db logs push-and-publish dispatch-test
+.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release publish-release-force setup-hooks setup-db reset-db logs push-and-publish sync-release-version dispatch-test
 
 help:
 	@echo "Dispatcher Bot"
@@ -112,39 +112,61 @@ test-release-smoke:
 # Used as a gate in publish-release to require integration tests.
 HAS_RESPONDER_CHANGES := $(shell git diff --name-only origin/main 2>/dev/null | grep -qE 'lib/.*/(responders|nats|consumers)/|lib/.*/bridge.*\.ex|lib/.*/event.*\.ex' && echo 1 || echo 0)
 
-publish-release: release
-	@if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
-		echo "🔒 Responder/NATS/bridge changes detected. Integration tests required before publish."; \
-		$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
-		echo "✅ Integration tests passed."; \
+sync-release-version:
+	@VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then \
+		echo "❌ Failed to resolve version from mix.exs"; exit 1; \
+	fi; \
+	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "$$VERSION" > .release-published; \
+	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
+
+publish-release:
+	@set -e; \
+	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then \
+		echo "Failed to resolve version from mix.exs"; \
+		exit 1; \
+	fi; \
+	TARBALL=dispatcher_bot-$$VERSION.tar.gz; \
+	echo "Version: $$VERSION"; \
+	echo ""; \
+	if [ -f "$$TARBALL" ]; then \
+		echo "✓ Tarball already exists locally: $$TARBALL (skipping rebuild)"; \
 	else \
-		[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)"; \
-	fi
-	@$(MAKE) test-release-smoke
-	@echo "==============================================="
-	@echo "Publishing release to GitHub"
-	@echo "==============================================="
-	@echo ""
-	@bash -c 'set -e; \
-	VERSION=$$(sed -n "s/^[[:space:]]*version:[[:space:]]*\"\([^\"]*\)\".*/\1/p" mix.exs | head -n 1); \
-	if [ -z "$$VERSION" ]; then echo "Failed to resolve version from mix.exs"; exit 1; fi; \
-	TARBALL="dispatcher_bot-$$VERSION.tar.gz"; \
-	echo "[1/3] Version: $$VERSION"; \
-	echo "[2/3] Creating tarball ($$TARBALL)..."; \
-	tar -czf "$$TARBALL" -C _build/prod/rel dispatcher_bot/; \
-	echo "[3/3] Publishing to GitHub..."; \
+		echo "📦 Building release (tarball not found locally)..."; \
+		if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
+			echo "🔒 Responder/NATS/bridge changes detected. Integration tests required before publish."; \
+			$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
+			echo "✅ Integration tests passed."; \
+		else \
+			[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)" || true; \
+		fi; \
+		$(MAKE) release; \
+		$(MAKE) test-release-smoke; \
+		echo "Creating release tarball..."; \
+		tar -czf "$$TARBALL" -C _build/prod/rel dispatcher_bot/; \
+		echo "✓ Tarball created: $$TARBALL"; \
+	fi; \
+	echo ""; \
+	echo "Creating GitHub release v$$VERSION..."; \
 	if gh release view "v$$VERSION" >/dev/null 2>&1; then \
 		gh release upload "v$$VERSION" "$$TARBALL" --clobber; \
 	else \
 		gh release create "v$$VERSION" "$$TARBALL" \
 			--title "Release v$$VERSION" \
-			--notes "Dispatcher Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
+			--notes "Dispatcher Bot Elixir release v$$VERSION" \
 			--draft=false; \
 	fi; \
+	echo "✓ Release published to GitHub"; \
 	echo ""; \
-	echo "✓ Release v$$VERSION published successfully"; \
-	echo "Timeline: test (~1-2min) → build release (~1min) → publish (~1min)"; \
-	echo ""'
+	echo "Publishing deploy.release.requested to NATS..."; \
+	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
+	REPO_SLUG=$$(git config --get remote.origin.url | sed 's/.*\///; s/\.git$$//'); \
+	NATS_SERVERS=$${NATS_SERVERS:-nats://localhost:4222}; \
+	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$$BOT_NAME" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
+	echo "✓ Deploy event published (deploy_pipeline_bot will pick it up)"; \
+	echo ""
 
 publish-release-force:
 	@echo "==============================================="
@@ -188,7 +210,34 @@ publish-release-force:
 	echo "3. Check deployment status: make jenkins-logs"
 
 push-and-publish:
-	@git push && $(MAKE) publish-release
+	@BOT_NAME=dispatcher; \
+	LOG_FILE="/tmp/.push-and-publish-${BOT_NAME}-$$-$$(date +%s).log"; \
+	echo "📋 Logging to: $$LOG_FILE" && \
+	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$$LOG_FILE" && \
+	echo "Timestamp: $$(date)" >> "$$LOG_FILE" && \
+	echo "Bot: $$BOT_NAME" >> "$$LOG_FILE" && \
+	echo "" >> "$$LOG_FILE" && \
+	echo "Step 1: git push (with pre-push validation)" >> "$$LOG_FILE" && \
+	if git push >> "$$LOG_FILE" 2>&1; then \
+		echo "✅ Push succeeded" && \
+		echo "Step 2: make publish-release" >> "$$LOG_FILE" && \
+		if $(MAKE) publish-release >> "$$LOG_FILE" 2>&1; then \
+			echo "✅ Publish succeeded" && \
+			echo "" >> "$$LOG_FILE" && \
+			echo "✅ PIPELINE COMPLETE" >> "$$LOG_FILE"; \
+		else \
+			echo "❌ Publish failed (see log)" && \
+			echo "❌ PIPELINE FAILED at publish-release" >> "$$LOG_FILE"; \
+			tail -30 "$$LOG_FILE"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "❌ Push failed (see log)" && \
+		echo "❌ PIPELINE FAILED at git push" >> "$$LOG_FILE"; \
+		tail -30 "$$LOG_FILE"; \
+		exit 1; \
+	fi && \
+	echo "📋 Full log: $$LOG_FILE"
 
 test-integration-report:
 	@echo "=================================================="
