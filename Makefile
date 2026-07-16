@@ -164,7 +164,7 @@ publish-release:
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
 	REPO_SLUG=$$(git config --get remote.origin.url | sed 's/.*\///; s/\.git$$//'); \
 	NATS_SERVERS=$${NATS_SERVERS:-nats://localhost:4222}; \
-	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$$BOT_NAME" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
+	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
 	echo "✓ Deploy event published (deploy_pipeline_bot will pick it up)"; \
 	echo ""
 
@@ -211,30 +211,30 @@ publish-release-force:
 
 push-and-publish:
 	@BOT_NAME=dispatcher; \
-	LOG_FILE="/tmp/.push-and-publish-${BOT_NAME}-$$-$$(date +%s).log"; \
+	LOG_FILE="/tmp/.push-and-publish-$${BOT_NAME}-$$-$$(date +%s).log"; \
 	echo "📋 Logging to: $$LOG_FILE" && \
-	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$$LOG_FILE" && \
-	echo "Timestamp: $$(date)" >> "$$LOG_FILE" && \
-	echo "Bot: $$BOT_NAME" >> "$$LOG_FILE" && \
-	echo "" >> "$$LOG_FILE" && \
-	echo "Step 1: git push (with pre-push validation)" >> "$$LOG_FILE" && \
-	if git push >> "$$LOG_FILE" 2>&1; then \
+	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$${LOG_FILE}" && \
+	echo "Timestamp: $$(date)" >> "$${LOG_FILE}" && \
+	echo "Bot: $${BOT_NAME}" >> "$${LOG_FILE}" && \
+	echo "" >> "$${LOG_FILE}" && \
+	echo "Step 1: git push (with pre-push validation)" >> "$${LOG_FILE}" && \
+	if git push >> "$${LOG_FILE}" 2>&1; then \
 		echo "✅ Push succeeded" && \
-		echo "Step 2: make publish-release" >> "$$LOG_FILE" && \
-		if $(MAKE) publish-release >> "$$LOG_FILE" 2>&1; then \
+		echo "Step 2: make publish-release" >> "$${LOG_FILE}" && \
+		if $(MAKE) publish-release >> "$${LOG_FILE}" 2>&1; then \
 			echo "✅ Publish succeeded" && \
-			echo "" >> "$$LOG_FILE" && \
-			echo "✅ PIPELINE COMPLETE" >> "$$LOG_FILE"; \
+			echo "" >> "$${LOG_FILE}" && \
+			echo "✅ PIPELINE COMPLETE" >> "$${LOG_FILE}"; \
 		else \
 			echo "❌ Publish failed (see log)" && \
-			echo "❌ PIPELINE FAILED at publish-release" >> "$$LOG_FILE"; \
-			tail -30 "$$LOG_FILE"; \
+			echo "❌ PIPELINE FAILED at publish-release" >> "$${LOG_FILE}"; \
+			tail -30 "$${LOG_FILE}"; \
 			exit 1; \
 		fi; \
 	else \
 		echo "❌ Push failed (see log)" && \
-		echo "❌ PIPELINE FAILED at git push" >> "$$LOG_FILE"; \
-		tail -30 "$$LOG_FILE"; \
+		echo "❌ PIPELINE FAILED at git push" >> "$${LOG_FILE}"; \
+		tail -30 "$${LOG_FILE}"; \
 		exit 1; \
 	fi && \
 	echo "📋 Full log: $$LOG_FILE"
