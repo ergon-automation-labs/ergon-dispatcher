@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lightweight git pre-push hook for Bot Army bots
+# Lightweight git pre-push hook for Bot Army bots (parallelized checks)
 # Keep push fast/reliable: run quick local validation only.
 
 set -e
@@ -26,21 +26,82 @@ if [[ $push_to_main -eq 1 ]]; then
   echo ""
 
   echo "📦 Ensuring Hex + dependencies..."
-  "$MIX_BIN" local.hex --force || {
+  "$MIX_BIN" local.hex || {
     echo "❌ mix local.hex failed - push aborted"
     exit 1
   }
-  "$MIX_BIN" deps.get --force || {
+  "$MIX_BIN" deps.get || {
     echo "❌ mix deps.get failed - push aborted"
     exit 1
   }
+
+  # Compile local path dependencies first so they're available during code compilation
+  echo "📦 Compiling path dependencies..."
+  for path_dep in ../bot_army_library_*; do
+    if [ -d "$path_dep" ]; then
+      (cd "$path_dep" && "$MIX_BIN" compile) || true
+    fi
+  done
   echo ""
 
-  echo "🔨 Compiling code..."
-  "$MIX_BIN" compile --force || {
+  # Run compile, credo, and tests in parallel for speed (~1-1.5 min instead of 2-3 min)
+  echo "🔨 Compiling code (incremental)..."
+  echo "📝 Running credo..."
+  echo "🧪 Running tests..."
+  echo ""
+
+  COMPILE_LOG="/tmp/.pre-push-compile-$$.log"
+  CREDO_LOG="/tmp/.pre-push-credo-$$.log"
+  TEST_LOG="/tmp/.pre-push-test-$$.log"
+
+  # Start all checks in parallel
+  "$MIX_BIN" compile >"$COMPILE_LOG" 2>&1 &
+  COMPILE_PID=$!
+
+  "$MIX_BIN" credo --strict >"$CREDO_LOG" 2>&1 &
+  CREDO_PID=$!
+
+  "$MIX_BIN" test >"$TEST_LOG" 2>&1 &
+  TEST_PID=$!
+
+  # Wait for all and collect exit codes
+  wait $COMPILE_PID
+  COMPILE_EXIT=$?
+
+  wait $CREDO_PID
+  CREDO_EXIT=$?
+
+  wait $TEST_PID
+  TEST_EXIT=$?
+
+  # Clean up logs on success
+  [ $COMPILE_EXIT -eq 0 ] && rm -f "$COMPILE_LOG"
+  [ $CREDO_EXIT -eq 0 ] && rm -f "$CREDO_LOG"
+  [ $TEST_EXIT -eq 0 ] && rm -f "$TEST_LOG"
+
+  # Check results and report
+  FAILED=0
+  if [ $COMPILE_EXIT -ne 0 ]; then
     echo "❌ Compilation failed - push aborted"
+    [ -f "$COMPILE_LOG" ] && tail -20 "$COMPILE_LOG"
+    FAILED=1
+  fi
+
+  if [ $CREDO_EXIT -ne 0 ]; then
+    echo "❌ Credo checks failed - push aborted"
+    [ -f "$CREDO_LOG" ] && tail -20 "$CREDO_LOG"
+    FAILED=1
+  fi
+
+  if [ $TEST_EXIT -ne 0 ]; then
+    echo "❌ Tests failed - push aborted"
+    [ -f "$TEST_LOG" ] && tail -20 "$TEST_LOG"
+    FAILED=1
+  fi
+
+  if [ $FAILED -eq 1 ]; then
     exit 1
-  }
+  fi
 
   echo ""
   echo "🕵️  Checking for Mix.env() in runtime code..."
@@ -48,19 +109,6 @@ if [[ $push_to_main -eq 1 ]]; then
     echo "❌ Mix.env() found in runtime code. Use @env Mix.env() for compile-time access instead."
     exit 1
   fi
-
-  echo ""
-  echo "📝 Running credo..."
-  "$MIX_BIN" credo --strict || {
-    echo "❌ Credo checks failed - push aborted"
-    exit 1
-  }
-
-  echo "🧪 Running tests..."
-  "$MIX_BIN" test || {
-    echo "❌ Tests failed - push aborted"
-    exit 1
-  }
 
   echo ""
   echo "✅ Pre-push checks passed"
