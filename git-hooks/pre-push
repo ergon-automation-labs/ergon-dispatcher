@@ -39,7 +39,7 @@ if [[ $push_to_main -eq 1 ]]; then
   echo "📦 Compiling path dependencies..."
   for path_dep in ../bot_army_library_*; do
     if [ -d "$path_dep" ]; then
-      (cd "$path_dep" && "$MIX_BIN" compile) || true
+      (cd "$path_dep" && HEX_HOME="$HEX_HOME" MIX_HOME="$MIX_HOME" "$MIX_BIN" compile) || true
     fi
   done
   echo ""
