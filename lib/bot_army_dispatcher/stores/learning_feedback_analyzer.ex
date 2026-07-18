@@ -375,7 +375,7 @@ defmodule BotArmyDispatcher.Stores.LearningFeedbackAnalyzer do
   end
 
   defp publish_feedback(analysis) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 1000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 1000) do
       {:ok, conn} ->
         signal = %{
           type: "learning_feedback_analysis",

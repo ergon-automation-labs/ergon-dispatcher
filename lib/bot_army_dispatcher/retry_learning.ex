@@ -13,7 +13,7 @@ defmodule BotArmyDispatcher.RetryLearning do
   use GenServer
   require Logger
 
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   # 5 minutes
   @eval_interval_ms 5 * 60 * 1000

@@ -54,7 +54,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
+    case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[SelfHealHandler] AI dispatch succeeded for #{target_bot}")
 
@@ -63,7 +63,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           resolved_at: DateTime.utc_now()
         })
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           intent_id,
           "dispatcher.heal",
           "act",
@@ -77,7 +77,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       {:error, reason} ->
         Logger.error("[SelfHealHandler] AI dispatch failed for #{target_bot}: #{inspect(reason)}")
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           intent_id,
           "dispatcher.heal",
           "act",
@@ -125,7 +125,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyRuntime.NATS.Publisher.publish("pi-go.command.run", envelope) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish("pi-go.command.run", envelope) do
       {:ok, _} ->
         Logger.info("[SelfHealHandler] Pi-Go investigation dispatched for #{target_bot}")
         publish_audit_event(target_bot, intent_id, :investigation_dispatched)
@@ -194,7 +194,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       }
     }
 
-    case BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
+    case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
       {:ok, _} ->
         Logger.warning("[SelfHealHandler] Human escalation task created for #{target_bot}")
         publish_audit_event(target_bot, intent_id, :escalated)
@@ -234,7 +234,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       "action" => action
     }
 
-    case BotArmyRuntime.NATS.Publisher.publish("events.dispatcher.self_heal.dispatched", audit) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish("events.dispatcher.self_heal.dispatched", audit) do
       {:ok, _} ->
         Logger.debug("[SelfHealHandler] Audit event published for #{target_bot}")
 
@@ -247,7 +247,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
 
   defp extract_tenant_id do
     System.get_env("BOT_ARMY_TENANT_ID") ||
-      BotArmyRuntime.Tenant.default_tenant_id()
+      BotArmyLibraryRuntime.Tenant.default_tenant_id()
   end
 
   defp extract_user_id do

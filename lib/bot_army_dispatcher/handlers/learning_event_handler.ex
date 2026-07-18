@@ -13,7 +13,7 @@ defmodule BotArmyDispatcher.Handlers.LearningEventHandler do
   require Logger
 
   alias BotArmyDispatcher.Stores.{UserLearningStore, InsightsExtractor}
-  alias BotArmyRuntime.NATS.Connection
+  alias BotArmyLibraryRuntime.NATS.Connection
 
   @reconnect_delay_ms 5000
 

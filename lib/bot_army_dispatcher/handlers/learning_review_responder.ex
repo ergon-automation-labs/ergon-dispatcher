@@ -14,7 +14,7 @@ defmodule BotArmyDispatcher.Handlers.LearningReviewResponder do
   require Logger
 
   alias BotArmyDispatcher.Stores.UserLearningStore
-  alias BotArmyRuntime.NATS.Reply
+  alias BotArmyLibraryRuntime.NATS.Reply
   import Ecto.Query
 
   @reconnect_delay_ms 5000
@@ -47,9 +47,9 @@ defmodule BotArmyDispatcher.Handlers.LearningReviewResponder do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
-        BotArmyRuntime.NATS.Connection.subscribe_to_status()
+        BotArmyLibraryRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("[LearningReviewResponder] Connected to NATS")
 
         subscriptions =
@@ -74,7 +74,7 @@ defmodule BotArmyDispatcher.Handlers.LearningReviewResponder do
           end)
           |> Enum.filter(&(not is_nil(&1)))
 
-        BotArmyRuntime.Registry.register("dispatcher_learning", @subjects, @version)
+        BotArmyLibraryRuntime.Registry.register("dispatcher_learning", @subjects, @version)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 

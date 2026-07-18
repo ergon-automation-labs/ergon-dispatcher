@@ -28,7 +28,7 @@ defmodule BotArmyDispatcher.HealthObserver do
 
   @doc "Get list of tracked bot names with recent observations."
   def tracked_bots do
-    Registry.select(BotArmyRuntime.Registry, [
+    Registry.select(BotArmyLibraryRuntime.Registry, [
       {{{:accumulated_context, :"$1"}, :_}, [], [:"$1"]}
     ])
   rescue
@@ -44,13 +44,13 @@ defmodule BotArmyDispatcher.HealthObserver do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
-        BotArmyRuntime.NATS.Connection.subscribe_to_status()
+        BotArmyLibraryRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("[HealthObserver] Connected to NATS, subscribing to health topics")
 
         subscriptions = setup_subscriptions(conn)
-        BotArmyRuntime.Registry.register("health_observer", @subjects, @version)
+        BotArmyLibraryRuntime.Registry.register("health_observer", @subjects, @version)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
@@ -87,10 +87,10 @@ defmodule BotArmyDispatcher.HealthObserver do
 
   @impl true
   def handle_info({:msg, msg}, state) do
-    BotArmyRuntime.Tracing.with_consumer_span(msg.topic, Map.get(msg, :headers), fn ->
+    BotArmyLibraryRuntime.Tracing.with_consumer_span(msg.topic, Map.get(msg, :headers), fn ->
       Logger.debug("[HealthObserver] Received message on subject: #{msg.topic}")
 
-      case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      case BotArmyLibraryCore.NATS.Decoder.decode(msg.body) do
         {:ok, decoded_message} ->
           handle_health_event(decoded_message, msg.topic)
 
@@ -127,7 +127,7 @@ defmodule BotArmyDispatcher.HealthObserver do
     stale_for_sec = Map.get(message, "stale_for_sec", 0)
 
     if bot_id do
-      BotArmyRuntime.Intent.AccumulatedContext.record(
+      BotArmyLibraryRuntime.Intent.AccumulatedContext.record(
         bot_id,
         %{
           type: :bot_stale,
@@ -151,7 +151,7 @@ defmodule BotArmyDispatcher.HealthObserver do
     bot_id = Map.get(message, "bot_id")
 
     if bot_id do
-      BotArmyRuntime.Intent.AccumulatedContext.record(
+      BotArmyLibraryRuntime.Intent.AccumulatedContext.record(
         bot_id,
         %{
           type: :bot_recovered,
@@ -175,7 +175,7 @@ defmodule BotArmyDispatcher.HealthObserver do
     service = Map.get(payload, "service")
 
     if service && status in ["degraded", "unhealthy"] do
-      BotArmyRuntime.Intent.AccumulatedContext.record(
+      BotArmyLibraryRuntime.Intent.AccumulatedContext.record(
         service,
         %{
           type: :health_degraded,

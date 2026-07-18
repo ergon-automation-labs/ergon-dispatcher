@@ -49,7 +49,7 @@ defmodule BotArmyDispatcher.Learning do
   use GenServer
   require Logger
 
-  alias BotArmyLearning.OutcomeTracker
+  alias BotArmyLibraryLearning.OutcomeTracker
 
   @name __MODULE__
   @default_confidence_threshold 0.6

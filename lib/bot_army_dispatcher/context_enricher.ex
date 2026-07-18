@@ -12,7 +12,7 @@ defmodule BotArmyDispatcher.ContextEnricher do
   """
 
   require Logger
-  alias BotArmyRuntime.NATS.Connection, as: NATSConnection
+  alias BotArmyLibraryRuntime.NATS.Connection, as: NATSConnection
 
   @bridge_graph_query_timeout_ms 8000
   @max_context_results 5

@@ -59,14 +59,14 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     end
 
     schedule_scan()
-    BotArmyRuntime.Registry.register("log_error_scanner", @subjects, @version)
+    BotArmyLibraryRuntime.Registry.register("log_error_scanner", @subjects, @version)
     Logger.info("[LogErrorScanner] Started, scanning every #{@scan_interval_ms}ms")
     {:ok, %{last_scan: nil, subscriptions: []}, {:continue, :connect}}
   end
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
         subs = setup_subscriptions(conn)
         {:noreply, %{state | subscriptions: subs}}

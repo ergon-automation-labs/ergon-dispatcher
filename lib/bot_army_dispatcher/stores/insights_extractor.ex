@@ -110,7 +110,7 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
   end
 
   defp request_llm_analysis(prompt) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 1000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 1000) do
       {:ok, conn} ->
         request_body = %{
           query: prompt,
@@ -249,7 +249,7 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
   end
 
   defp publish_insight_signal(learning, insights_data) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 1000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 1000) do
       {:ok, conn} ->
         signal = %{
           learning_id: learning.id,

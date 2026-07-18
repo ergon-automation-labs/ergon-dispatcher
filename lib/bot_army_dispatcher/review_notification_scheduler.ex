@@ -94,7 +94,7 @@ defmodule BotArmyDispatcher.ReviewNotificationScheduler do
   end
 
   defp publish_notification(notification, learnings) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 1000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 1000) do
       {:ok, conn} ->
         # Publish to notification router
         Gnat.pub(

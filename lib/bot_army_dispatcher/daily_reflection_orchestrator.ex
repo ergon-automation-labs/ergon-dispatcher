@@ -114,7 +114,7 @@ defmodule BotArmyDispatcher.DailyReflectionOrchestrator do
     today = Date.utc_today()
     tomorrow = Date.add(today, 1)
 
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            "bridge.task.list",
            %{"status" => "completed", "limit" => 50},
            timeout_ms: @gtd_timeout_ms
@@ -145,7 +145,7 @@ defmodule BotArmyDispatcher.DailyReflectionOrchestrator do
   end
 
   defp fetch_context do
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            "bridge.context.current",
            %{},
            timeout_ms: @gtd_timeout_ms
@@ -233,7 +233,7 @@ defmodule BotArmyDispatcher.DailyReflectionOrchestrator do
       }
     }
 
-    case BotArmyCore.IntegrationGates.bridge_publish("bridge.discord.message.send", envelope) do
+    case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.discord.message.send", envelope) do
       {:ok, _} ->
         Logger.info("[DailyReflectionOrchestrator] Reflection published to Discord")
 

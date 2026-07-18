@@ -2,7 +2,7 @@ defmodule BotArmyDispatcher.RetryOutcomeCollector do
   @moduledoc """
   Collects retry attempt outcomes from Publisher events.
 
-  Subscribes to events.runtime.retry.attempt (published by BotArmyRuntime.Telemetry).
+  Subscribes to events.runtime.retry.attempt (published by BotArmyLibraryRuntime.Telemetry).
   For each event, updates an ETS sliding window of recent outcomes per circuit_breaker_key.
 
   This data feeds RetryHeuristicOracle's confidence gate.
@@ -11,7 +11,7 @@ defmodule BotArmyDispatcher.RetryOutcomeCollector do
   use GenServer
   require Logger
 
-  alias BotArmyRuntime.NATS.Connection
+  alias BotArmyLibraryRuntime.NATS.Connection
 
   @subject "events.runtime.retry.attempt"
   @window_size 50

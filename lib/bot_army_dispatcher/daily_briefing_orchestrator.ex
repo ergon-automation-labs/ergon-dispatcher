@@ -211,7 +211,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       "limit" => 10
     }
 
-    case BotArmyCore.IntegrationGates.bridge_request("bridge.task.search", payload,
+    case BotArmyLibraryCore.IntegrationGates.bridge_request("bridge.task.search", payload,
            timeout_ms: @bridge_timeout_ms
          ) do
       {:ok, %{"data" => %{"tasks" => tasks}}} ->
@@ -242,7 +242,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
       "limit" => 10
     }
 
-    case BotArmyCore.IntegrationGates.bridge_request("bridge.task.search", payload,
+    case BotArmyLibraryCore.IntegrationGates.bridge_request("bridge.task.search", payload,
            timeout_ms: @bridge_timeout_ms
          ) do
       {:ok, %{"data" => %{"tasks" => tasks}}} ->
@@ -268,14 +268,14 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   end
 
   defp fetch_fitness_today do
-    case BotArmyRuntime.NATS.Publisher.request("fitness.workout.today", %{},
+    case BotArmyLibraryRuntime.NATS.Publisher.request("fitness.workout.today", %{},
            timeout_ms: @fitness_timeout_ms
          ) do
       {:ok, %{"ok" => true, "data" => %{"workout" => workout}}} ->
         workout
 
       {:ok, %{"ok" => false, "error" => "no_plan_found"}} ->
-        _ = BotArmyRuntime.NATS.Publisher.publish("fitness.workout.plan.generate", %{})
+        _ = BotArmyLibraryRuntime.NATS.Publisher.publish("fitness.workout.plan.generate", %{})
         :generating
 
       {:ok, _other} ->
@@ -295,7 +295,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   end
 
   defp fetch_wife_care_digest do
-    case BotArmyRuntime.NATS.Publisher.request("wife_care.gtd_hook.refresh", %{},
+    case BotArmyLibraryRuntime.NATS.Publisher.request("wife_care.gtd_hook.refresh", %{},
            timeout_ms: @wife_care_timeout_ms
          ) do
       {:ok, %{"ok" => true, "data" => %{"digest_summary" => summary}}} ->
@@ -330,7 +330,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
     user_id = System.get_env("BOT_ARMY_USER_ID") || "00000000-0000-0000-0000-000000000002"
     payload = %{"tenant_id" => tenant_id, "user_id" => user_id}
 
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            "dispatcher.system.health.digest.query",
            payload,
            timeout_ms: @health_timeout_ms
@@ -522,7 +522,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
   end
 
   defp write_to_para(path, content) do
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            "para.fs.write",
            %{
              "schema_version" => "1.0",

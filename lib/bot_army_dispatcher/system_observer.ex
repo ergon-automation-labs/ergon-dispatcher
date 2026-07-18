@@ -422,7 +422,7 @@ defmodule BotArmyDispatcher.SystemObserver do
   end
 
   defp nats_request(subject, payload) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
         encoded = Jason.encode!(payload)
 
@@ -443,7 +443,7 @@ defmodule BotArmyDispatcher.SystemObserver do
   end
 
   defp publish_digest(digest) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
         encoded = Jason.encode!(digest)
         Gnat.pub(conn, "dispatcher.system.health.digest", encoded)
@@ -640,7 +640,7 @@ defmodule BotArmyDispatcher.SystemObserver do
   end
 
   defp publish_briefing_alert(alerts) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
         Enum.each(alerts, fn alert ->
           payload =

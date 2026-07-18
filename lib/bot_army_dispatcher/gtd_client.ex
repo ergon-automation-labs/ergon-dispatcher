@@ -12,7 +12,7 @@ defmodule BotArmyDispatcher.GTDClient do
 
   def request(subject, payload, opts \\ []) do
     if enabled?() do
-      BotArmyRuntime.NATS.Publisher.request(subject, payload, opts)
+      BotArmyLibraryRuntime.NATS.Publisher.request(subject, payload, opts)
     else
       Logger.debug("[GTDClient] GTD integration disabled, skipping request to #{subject}")
       {:error, :gtd_integration_disabled}

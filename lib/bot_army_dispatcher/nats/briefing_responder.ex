@@ -32,7 +32,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         Logger.info("[BriefingResponder] Connected, subscribing to bridge.brief.today")
         subscribe_to_briefing(conn, state)
@@ -254,7 +254,7 @@ defmodule BotArmyDispatcher.NATS.BriefingResponder do
   end
 
   defp fetch_health_digest do
-    case BotArmyCore.IntegrationGates.dispatcher_request("dispatcher.system.health", %{}, timeout_ms: 5_000) do
+    case BotArmyLibraryCore.IntegrationGates.dispatcher_request("dispatcher.system.health", %{}, timeout_ms: 5_000) do
       {:ok, %{"data" => data}} ->
         data
 

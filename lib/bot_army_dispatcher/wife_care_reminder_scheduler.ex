@@ -59,7 +59,7 @@ defmodule BotArmyDispatcher.WifeCareReminderScheduler do
           "source" => "dispatcher"
         }
 
-        case BotArmyRuntime.NATS.Publisher.publish(
+        case BotArmyLibraryRuntime.NATS.Publisher.publish(
                "bot_army.wife_care.intent.refresh_digest",
                intent
              ) do

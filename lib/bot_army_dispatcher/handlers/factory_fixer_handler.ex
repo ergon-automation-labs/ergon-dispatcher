@@ -68,7 +68,7 @@ defmodule BotArmyDispatcher.Handlers.FactoryFixerHandler do
       "[FactoryFixerHandler] routing command_type=#{command_type} event_id=#{envelope["event_id"]}"
     )
 
-    case BotArmyRuntime.NATS.Publisher.publish(command_type, envelope) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish(command_type, envelope) do
       {:ok, _} ->
         Logger.info("[FactoryFixerHandler] routed #{command_type} successfully")
         :ok

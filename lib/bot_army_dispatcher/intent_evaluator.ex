@@ -62,7 +62,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   end
 
   defp evaluate_bot(bot_name, cache) do
-    snapshot = BotArmyRuntime.Intent.AccumulatedContext.snapshot(bot_name)
+    snapshot = BotArmyLibraryRuntime.Intent.AccumulatedContext.snapshot(bot_name)
     context = build_context_from_snapshot(snapshot)
 
     case BotArmyDispatcher.RetryConfidenceOracle.fetch(bot_name) do
@@ -110,7 +110,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
   end
 
   defp evaluate_threshold(bot_name, context, adjustments, cache) do
-    case BotArmyRuntime.Intent.ThresholdModel.evaluate(
+    case BotArmyLibraryRuntime.Intent.ThresholdModel.evaluate(
            "dispatcher",
            "heal",
            @thresholds,
@@ -139,7 +139,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
       "signals" => signals
     }
 
-    BotArmyRuntime.NATS.Publisher.publish(@obs_confidence_evaluated, payload)
+    BotArmyLibraryRuntime.NATS.Publisher.publish(@obs_confidence_evaluated, payload)
     |> case do
       :ok -> :ok
       {:ok, _} -> :ok
@@ -157,7 +157,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    BotArmyRuntime.NATS.Publisher.publish("events.dispatcher.retry.skipped", payload)
+    BotArmyLibraryRuntime.NATS.Publisher.publish("events.dispatcher.retry.skipped", payload)
   end
 
   defp build_context_from_snapshot(snapshot) do
@@ -188,7 +188,7 @@ defmodule BotArmyDispatcher.IntentEvaluator do
       "reason" => reason
     }
 
-    case BotArmyRuntime.Intent.Publisher.publish_intent(
+    case BotArmyLibraryRuntime.Intent.Publisher.publish_intent(
            "dispatcher",
            "heal",
            metadata

@@ -29,7 +29,7 @@ defmodule BotArmyDispatcher.DiscordPublisher do
     user_id = System.get_env("BOT_ARMY_USER_ID") || "00000000-0000-0000-0000-000000000002"
 
     notification_allowed? =
-      case BotArmyRuntime.NATS.Publisher.request(
+      case BotArmyLibraryRuntime.NATS.Publisher.request(
              "context.notification.get",
              %{"tenant_id" => @tenant_id, "user_id" => user_id},
              timeout_ms: @context_timeout_ms
@@ -45,7 +45,7 @@ defmodule BotArmyDispatcher.DiscordPublisher do
       end
 
     if notification_allowed? do
-      case BotArmyCore.IntegrationGates.bridge_publish("bridge.discord.message.send", envelope) do
+      case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.discord.message.send", envelope) do
         {:ok, _} ->
           Logger.info("[DiscordPublisher] Discord message published")
 

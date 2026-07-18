@@ -70,7 +70,7 @@ defmodule BotArmyDispatcher.Handlers.OptimizationApprovalHandler do
   defp update_proposal_status(proposal_id, status) do
     import Ecto.Query
 
-    BotArmyLearning.Repo.update_all(
+    BotArmyLibraryLearning.Repo.update_all(
       from(p in "learning_optimization_proposals",
         where: p.id == ^proposal_id
       ),
@@ -104,7 +104,7 @@ defmodule BotArmyDispatcher.Handlers.OptimizationApprovalHandler do
   defp fetch_proposal(proposal_id) do
     import Ecto.Query
 
-    BotArmyLearning.Repo.one(
+    BotArmyLibraryLearning.Repo.one(
       from(p in "learning_optimization_proposals",
         where: p.id == ^proposal_id
       )

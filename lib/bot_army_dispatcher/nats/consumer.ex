@@ -55,9 +55,9 @@ defmodule BotArmyDispatcher.NATS.Consumer do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
-        BotArmyRuntime.NATS.Connection.subscribe_to_status()
+        BotArmyLibraryRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("[DispatcherConsumer] Connected to NATS, subscribing to topics")
 
         subscriptions = setup_subscriptions(conn)
@@ -65,14 +65,14 @@ defmodule BotArmyDispatcher.NATS.Consumer do
         deployment_status =
           Application.get_env(:bot_army_dispatcher, :deployment_status, "deployed")
 
-        BotArmyRuntime.Registry.register("dispatcher", @subjects, @version, deployment_status)
+        BotArmyLibraryRuntime.Registry.register("dispatcher", @subjects, @version, deployment_status)
         Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
 
         {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
       {:error, _reason} ->
         next_attempt = state.reconnect_attempt + 1
-        delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+        delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
 
         Logger.warning(
           "[DispatcherConsumer] NATS connection not ready, will retry in #{delay}ms (attempt #{next_attempt})"
@@ -117,7 +117,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
 
   @impl true
   def handle_info({:msg, msg}, state) do
-    BotArmyRuntime.Tracing.with_consumer_span(msg.topic, Map.get(msg, :headers), fn ->
+    BotArmyLibraryRuntime.Tracing.with_consumer_span(msg.topic, Map.get(msg, :headers), fn ->
       Logger.debug("[DispatcherConsumer] Received NATS message on subject: #{msg.topic}")
       dispatch_message(msg)
     end)
@@ -128,7 +128,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
   @impl true
   def handle_info({:nats, :disconnected}, state) do
     next_attempt = state.reconnect_attempt + 1
-    delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+    delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
 
     Logger.warning(
       "[DispatcherConsumer] Disconnected from NATS, will reconnect in #{delay}ms (attempt #{next_attempt})"
@@ -155,7 +155,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
       deployment_status =
         Application.get_env(:bot_army_dispatcher, :deployment_status, "deployed")
 
-      BotArmyRuntime.Registry.register("dispatcher", @subjects, @version, deployment_status)
+      BotArmyLibraryRuntime.Registry.register("dispatcher", @subjects, @version, deployment_status)
       Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
     end
 
@@ -173,12 +173,12 @@ defmodule BotArmyDispatcher.NATS.Consumer do
 
       response =
         if latest do
-          BotArmyRuntime.NATS.Reply.ok(latest)
+          BotArmyLibraryRuntime.NATS.Reply.ok(latest)
         else
-          BotArmyRuntime.NATS.Reply.error("No digest available yet", :no_digest)
+          BotArmyLibraryRuntime.NATS.Reply.error("No digest available yet", :no_digest)
         end
 
-      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+      case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5000) do
         {:ok, conn} ->
           Gnat.pub(conn, reply, Jason.encode!(response))
           Logger.debug("[DispatcherConsumer] Digest query response sent")
@@ -213,7 +213,7 @@ defmodule BotArmyDispatcher.NATS.Consumer do
 
     case msg do
       %{topic: topic, body: body} ->
-        case BotArmyCore.NATS.Decoder.decode(body) do
+        case BotArmyLibraryCore.NATS.Decoder.decode(body) do
           {:ok, decoded_message} ->
             BotArmyDispatcher.Handlers.AgentDispatchHandler.handle(decoded_message, topic)
 

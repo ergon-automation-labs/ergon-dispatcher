@@ -74,7 +74,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
 
   defp collect_stats do
     Enum.map(@known_categories, fn category ->
-      stats = BotArmyLearning.OutcomeTracker.stats(category, :dispatcher_outcome_tracker)
+      stats = BotArmyLibraryLearning.OutcomeTracker.stats(category, :dispatcher_outcome_tracker)
       {category, stats}
     end)
     |> Map.new()
@@ -147,7 +147,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
     subject = "pi-go.llm.request.chat.background"
 
     with {:ok, conn} <-
-           GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000),
+           GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000),
          {:ok, %{body: body}} <-
            Gnat.request(conn, subject, Jason.encode!(request_payload), receive_timeout: 65_000),
          {:ok, response} <- Jason.decode(body) do
@@ -241,7 +241,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
     proposal_with_id
     |> Map.put(:status, "pending")
     |> then(fn p ->
-      %BotArmyLearning.Schema.OptimizationProposal{
+      %BotArmyLibraryLearning.Schema.OptimizationProposal{
         id: p.id,
         category: p.category,
         type: p.type,
@@ -252,13 +252,13 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
         proposed_at: p.proposed_at
       }
     end)
-    |> BotArmyLearning.Repo.insert()
+    |> BotArmyLibraryLearning.Repo.insert()
   rescue
     _ -> :ok
   end
 
   defp publish_nats_proposal_event(event) do
-    BotArmyRuntime.NATS.Publisher.publish("events.learning.optimization_proposal", event)
+    BotArmyLibraryRuntime.NATS.Publisher.publish("events.learning.optimization_proposal", event)
   rescue
     _ -> :ok
   end
@@ -303,7 +303,7 @@ defmodule BotArmyDispatcher.OptimizationScheduler do
       "payload" => task_payload
     }
 
-    BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope)
+    BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.task.create", envelope)
   rescue
     _ -> :ok
   end

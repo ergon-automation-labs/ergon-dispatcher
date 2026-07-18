@@ -71,7 +71,7 @@ defmodule BotArmyDispatcher.RetryConfidenceOracle do
 
   defp fetch_success_rate(bot_name) do
     outcomes =
-      BotArmyRuntime.Intent.OutcomeTracker.recent_outcomes("dispatcher", "heal", limit: 10)
+      BotArmyLibraryRuntime.Intent.OutcomeTracker.recent_outcomes("dispatcher", "heal", limit: 10)
 
     bot_outcomes =
       Enum.filter(outcomes, fn %{outcome_metadata: meta} ->
@@ -115,7 +115,7 @@ defmodule BotArmyDispatcher.RetryConfidenceOracle do
   defp decide(_), do: :skip
 
   defp request_nats(subject, payload) do
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            subject,
            payload,
            timeout_ms: @nats_timeout_ms

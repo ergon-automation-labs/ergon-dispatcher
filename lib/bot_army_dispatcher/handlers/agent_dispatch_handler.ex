@@ -10,8 +10,8 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
 
   defp ai_severity_threshold do
     base = 0.7
-    factor = BotArmyLearning.ThresholdAdapter.adjustment("dispatcher.ai_dispatch")
-    BotArmyLearning.ThresholdAdapter.apply_adjustment(base, factor)
+    factor = BotArmyLibraryLearning.ThresholdAdapter.adjustment("dispatcher.ai_dispatch")
+    BotArmyLibraryLearning.ThresholdAdapter.apply_adjustment(base, factor)
   end
 
   @doc """
@@ -131,11 +131,11 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       "[AgentDispatchHandler] Dispatching to AI: event_id=#{context.event_id} topic=#{context.topic}"
     )
 
-    case BotArmyCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
+    case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.agent.dispatch", envelope) do
       {:ok, _} ->
         Logger.info("[AgentDispatchHandler] AI dispatch succeeded: event_id=#{context.event_id}")
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           context.event_id,
           "dispatcher.ai_dispatch",
           "dispatch",
@@ -150,7 +150,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           "[AgentDispatchHandler] AI dispatch failed: event_id=#{context.event_id} reason=#{inspect(reason)}"
         )
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           context.event_id,
           "dispatcher.ai_dispatch",
           "dispatch",
@@ -184,13 +184,13 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       "[AgentDispatchHandler] Escalating to human: event_id=#{context.event_id} topic=#{context.topic} severity=#{context.severity}"
     )
 
-    case BotArmyCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
+    case BotArmyLibraryCore.IntegrationGates.bridge_publish("bridge.task.create", envelope) do
       {:ok, _} ->
         Logger.info(
           "[AgentDispatchHandler] Human escalation task created: event_id=#{context.event_id}"
         )
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           context.event_id,
           "dispatcher.ai_dispatch",
           "escalate",
@@ -205,7 +205,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
           "[AgentDispatchHandler] Human escalation failed: event_id=#{context.event_id} reason=#{inspect(reason)}"
         )
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyLibraryLearning.OutcomeTracker.record(
           context.event_id,
           "dispatcher.ai_dispatch",
           "escalate",
@@ -242,7 +242,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
   defp extract_tenant_id(message) do
     Map.get(message, "tenant_id") ||
       System.get_env("BOT_ARMY_TENANT_ID") ||
-      BotArmyRuntime.Tenant.default_tenant_id()
+      BotArmyLibraryRuntime.Tenant.default_tenant_id()
   end
 
   defp extract_user_id(message) do
@@ -258,7 +258,7 @@ defmodule BotArmyDispatcher.Handlers.AgentDispatchHandler do
       if bot_name do
         severity = severity_from_payload(message, topic)
 
-        BotArmyRuntime.Intent.AccumulatedContext.record(
+        BotArmyLibraryRuntime.Intent.AccumulatedContext.record(
           bot_name,
           %{
             type: :dlq_event,

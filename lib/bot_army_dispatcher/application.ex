@@ -143,7 +143,7 @@ defmodule BotArmyDispatcher.Application do
     if env() == :test,
       do: children,
       else: [
-        {BotArmyLearning.OutcomeTracker,
+        {BotArmyLibraryLearning.OutcomeTracker,
          [name: :dispatcher_outcome_tracker, repo: BotArmyDispatcher.Repo]}
         | children
       ]

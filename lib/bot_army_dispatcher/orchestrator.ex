@@ -72,7 +72,7 @@ defmodule BotArmyDispatcher.Orchestrator do
   """
 
   require Logger
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   # 5 minutes per subtask
   @default_timeout_ms 300_000
@@ -91,7 +91,7 @@ defmodule BotArmyDispatcher.Orchestrator do
       - `:decomposition_id` - UUID for tracking
       - `:timeout_ms` - Total timeout (default: 5 min)
       - `:subtask_timeout_ms` - Per-subtask timeout (default: 1 min)
-      - `:publisher_module` - Module to use for publishing (default: BotArmyRuntime.NATS.Publisher)
+      - `:publisher_module` - Module to use for publishing (default: BotArmyLibraryRuntime.NATS.Publisher)
 
   ## Returns
     - `{:ok, outcome_map}` - Execution completed (may have partial failures)
