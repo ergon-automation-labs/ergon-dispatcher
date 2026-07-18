@@ -30,16 +30,20 @@ if [[ $push_to_main -eq 1 ]]; then
     echo "❌ mix local.hex failed - push aborted"
     exit 1
   }
-  "$MIX_BIN" deps.get || {
+  DEPS_LOG="/tmp/.pre-push-deps-$$.log"
+  if ! "$MIX_BIN" deps.get >"$DEPS_LOG" 2>&1; then
     echo "❌ mix deps.get failed - push aborted"
+    echo ""
+    echo "=== Dependency resolution error ==="
+    cat "$DEPS_LOG"
     exit 1
-  }
+  fi
 
   # Compile local path dependencies first so they're available during code compilation
   echo "📦 Compiling path dependencies..."
   for path_dep in ../bot_army_library_*; do
     if [ -d "$path_dep" ]; then
-      (cd "$path_dep" && HEX_HOME="$HEX_HOME" MIX_HOME="$MIX_HOME" "$MIX_BIN" deps.compile) || true
+      (cd "$path_dep" && HEX_HOME="$HEX_HOME" MIX_HOME="$MIX_HOME" "$MIX_BIN" deps.compile) 2>&1 | tee -a /tmp/.pre-push-path-deps-$$.log || true
     fi
   done
   echo ""
