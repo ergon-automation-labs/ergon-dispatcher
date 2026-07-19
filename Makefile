@@ -240,6 +240,13 @@ pre-push-cleanup:
 		git commit -m "chore: lock file updates from pre-push validation" || true; \
 	fi
 	@echo "✓ Ready to push"
+push: test compile credo pre-push-cleanup
+	@echo "✅ All validations passed"
+	@echo "$$(date +%s)" > .push-validated
+	@echo "✓ Proof-of-validation created"
+	@$(MAKE) git-push
+
+
 git-push: pre-push-cleanup
 	@BOT_NAME=dispatcher; \
 	LOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
