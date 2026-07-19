@@ -171,7 +171,7 @@ publish-release:
 			--draft=false; \
 	fi; \
 	echo "✓ Release published to GitHub"; \
-t$(MAKE) sync-release-version;
+	$(MAKE) sync-release-version; \
 	echo ""; \
 	echo "Publishing deploy.release.requested to NATS..."; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
@@ -216,7 +216,7 @@ publish-release-force:
 			--draft=false; \
 	fi; \
 	echo "✓ Release published to GitHub"; \
-t$(MAKE) sync-release-version;
+	$(MAKE) sync-release-version; \
 	echo ""; \
 	echo "Next steps:"; \
 	echo "1. Jenkins will automatically detect the new release"; \
@@ -229,8 +229,8 @@ pre-push-cleanup:
 		echo "✓ No hook changes"; \
 	else \
 		echo "📋 Staging hook changes..."; \
-		git add git-hooks/pre-push; \
-		git commit -m "chore: sync pre-push hook" || true; \
+		git add git-hooks/pre-push git-hooks/post-push; \
+			git commit -m "chore: sync pre-push hook" || true; \
 	fi
 	@if git diff --quiet mix.lock; then \
 		echo "✓ No lock file changes"; \
@@ -240,13 +240,12 @@ pre-push-cleanup:
 		git commit -m "chore: lock file updates from pre-push validation" || true; \
 	fi
 	@echo "✓ Ready to push"
-
 git-push: pre-push-cleanup
-t@BOT_NAME=dispatcher; \
-tLOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
-techo "Pushing to origin/main and logging to $$LOG_FILE..."; \
-tgit push 2>&1 | tee "$$LOG_FILE"; \
-techo "✓ Log saved: $$LOG_FILE"
+	@BOT_NAME=dispatcher; \
+	LOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Pushing to origin/main and logging to $$LOG_FILE..."; \
+	git push 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Log saved: $$LOG_FILE"
 
 push-and-publish: git-push publish-release
 test-integration-report:
