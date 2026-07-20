@@ -139,10 +139,7 @@ sync-release-version:
 	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
 
 publish-release:
-	@BOT_NAME=dispatcher; \
-	LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; \
-	echo "Publishing release and logging to $$LOG_FILE..."; \
-	{ \
+	@BOT_NAME=dispatcher; LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; { \
 	set -e; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
@@ -189,8 +186,8 @@ publish-release:
 	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
 	echo "✓ Deploy event published (deploy_pipeline_bot will pick it up)"; \
 	echo ""; \
-	} 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Publish-release log: $$LOG_FILE"
+	echo "✓ Publish-release log: $$LOG_FILE"; \
+	} 2>&1 | tee "$$LOG_FILE"
 
 publish-release-force:
 	@echo "==============================================="
