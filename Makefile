@@ -78,13 +78,18 @@ compile:
 	echo "✓ Compilation log: $$LOG_FILE"
 
 test:
-	@echo "Running test suite (8 test files)..."
-	@echo "Expected: 1-2 minutes"
-	@echo ""
-	@time $(MIX) test
+	@BOT_NAME=dispatcher; \
+	LOG_FILE="/tmp/test-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Running tests and logging to $$LOG_FILE..."; \
+	time $(MIX) test 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Test log: $$LOG_FILE"
 
 credo:
-	$(MIX) credo
+	@BOT_NAME=dispatcher; \
+	LOG_FILE="/tmp/credo-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Running credo and logging to $$LOG_FILE..."; \
+	$(MIX) credo 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Credo log: $$LOG_FILE"
 
 dialyzer: deps
 	$(MIX) dialyzer
