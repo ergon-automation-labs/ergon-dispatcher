@@ -1,19 +1,24 @@
 defmodule BotArmyDispatcher.BridgeHealthMonitor do
   @moduledoc """
-  Monitors Claude Bridge health and manages failover between air (primary) and mini (secondary).
+  Monitors multi-service health and manages failover between air (primary) and mini (secondary).
 
-  **Behavior:**
-  - Probes air's bridge health every 5 minutes
+  Supported services:
+  - `bridge` (claude_bridge)
+  - `synapse` (synapse_bot)
+  - `sre_bot` (sre_bot)
+
+  **Behavior per service:**
+  - Probes air instance every 5 minutes
   - Tracks consecutive failures (resets on success)
   - On 3 consecutive failures: publishes failover signal to activate mini
   - When air recovers: publishes signal to prefer air
   - After mini is active: retries air every 15 minutes indefinitely
 
   **NATS Signals:**
-  - Probe: `bot_army.claude.health.air` (health check request/reply)
+  - Probe: `bot_army.{service}.health.air` (health check request/reply)
   - Failover: publishes to `system.failover.request` with:
-    - `{"service":"bridge","action":"activate_mini"}` - switch to mini
-    - `{"service":"bridge","action":"prefer_air"}` - air recovered, prepare to switch back
+    - `{"service":"{service}","action":"activate_mini"}` - switch to mini
+    - `{"service":"{service}","action":"prefer_air"}` - air recovered
   """
 
   use GenServer
@@ -33,27 +38,37 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
   # Reconnect delay for NATS issues
   @reconnect_delay_ms 5_000
 
+  # Services to monitor
+  @monitored_services [:bridge, :synapse, :sre_bot]
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
   @impl true
   def init(_opts) do
+    # Initialize per-service health tracking
+    services =
+      Map.new(@monitored_services, fn service ->
+        {service,
+         %{
+           consecutive_failures: 0,
+           current_target: :air,
+           last_air_success_time: nil,
+           last_air_attempt_time: nil
+         }}
+      end)
+
     state = %{
-      # Health tracking
-      consecutive_failures: 0,
-      # :air or :mini
-      current_target: :air,
-      last_air_success_time: nil,
-      last_air_attempt_time: nil,
-      # Timers
-      health_check_timer: nil,
-      air_retry_timer: nil,
-      # NATS connection
+      services: services,
+      timers: %{},
       conn: nil
     }
 
-    Logger.info("[BridgeHealthMonitor] Starting bridge health monitor")
+    Logger.info(
+      "[MultiServiceHealthMonitor] Starting health monitor for #{Enum.count(@monitored_services)} services"
+    )
+
     {:ok, state, {:continue, :connect}}
   end
 
@@ -62,31 +77,31 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
     case GenServer.call(Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         Connection.subscribe_to_status()
-        Logger.info("[BridgeHealthMonitor] Connected to NATS")
-        # Schedule first health check
-        timer = schedule_health_check(@health_check_interval_ms)
-        {:noreply, %{state | conn: conn, health_check_timer: timer}}
+        Logger.info("[MultiServiceHealthMonitor] Connected to NATS")
+
+        # Schedule first health checks for all services
+        timers =
+          Map.new(@monitored_services, fn service ->
+            timer =
+              Process.send_after(self(), {:health_check, service}, @health_check_interval_ms)
+
+            {service, timer}
+          end)
+
+        {:noreply, %{state | conn: conn, timers: timers}}
 
       {:error, _reason} ->
-        Logger.warning("[BridgeHealthMonitor] NATS connection not ready, will retry")
+        Logger.warning("[MultiServiceHealthMonitor] NATS connection not ready, will retry")
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     end
   end
 
   @impl true
-  def handle_info(:health_check, state) do
-    new_state = perform_health_check(state)
-    timer = schedule_health_check(@health_check_interval_ms)
-    {:noreply, %{new_state | health_check_timer: timer}}
-  end
-
-  @impl true
-  def handle_info(:air_retry, state) do
-    Logger.info("[BridgeHealthMonitor] Retrying air connection after 15 min recovery window")
-    new_state = perform_health_check(state)
-    timer = schedule_health_check(@air_retry_interval_ms)
-    {:noreply, %{new_state | air_retry_timer: timer}}
+  def handle_info({:health_check, service}, state) do
+    new_state = perform_health_check(state, service)
+    timer = Process.send_after(self(), {:health_check, service}, @health_check_interval_ms)
+    {:noreply, %{new_state | timers: Map.put(new_state.timers, service, timer)}}
   end
 
   @impl true
@@ -96,13 +111,13 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
 
   @impl true
   def handle_info({:nats, :disconnected}, state) do
-    Logger.warning("[BridgeHealthMonitor] Disconnected from NATS")
+    Logger.warning("[MultiServiceHealthMonitor] Disconnected from NATS")
     {:noreply, %{state | conn: nil}}
   end
 
   @impl true
   def handle_info({:nats, :connected}, state) do
-    Logger.info("[BridgeHealthMonitor] Reconnected to NATS")
+    Logger.info("[MultiServiceHealthMonitor] Reconnected to NATS")
     {:noreply, state, {:continue, :connect}}
   end
 
@@ -113,24 +128,26 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
 
   # Private functions
 
-  defp perform_health_check(state) do
-    case probe_air_bridge(state.conn) do
+  defp perform_health_check(state, service) do
+    case probe_service_health(state.conn, service) do
       {:ok, health_response} ->
-        # Air is healthy
-        on_air_success(state, health_response)
+        on_service_success(state, service, health_response)
 
       {:error, reason} ->
-        Logger.warning("[BridgeHealthMonitor] Air bridge health check failed: #{inspect(reason)}")
-        on_air_failure(state)
+        Logger.warning(
+          "[MultiServiceHealthMonitor] #{service} health check failed: #{inspect(reason)}"
+        )
+
+        on_service_failure(state, service)
     end
   end
 
-  defp probe_air_bridge(conn) when is_nil(conn) do
+  defp probe_service_health(conn, service) when is_nil(conn) do
     {:error, "NATS connection not available"}
   end
 
-  defp probe_air_bridge(conn) do
-    subject = "bot_army.claude.health.air"
+  defp probe_service_health(conn, service) do
+    subject = "bot_army.#{service}.health.air"
     payload = "{}"
 
     try do
@@ -138,7 +155,10 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
         {:ok, response} ->
           case Jason.decode(response.body) do
             {:ok, decoded} ->
-              Logger.debug("[BridgeHealthMonitor] Air bridge health: #{decoded["status"]}")
+              Logger.debug(
+                "[MultiServiceHealthMonitor] #{service} air health: #{decoded["status"]}"
+              )
+
               {:ok, decoded}
 
             {:error, reason} ->
@@ -154,84 +174,109 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
     end
   end
 
-  defp on_air_success(state, health_response) do
-    case state.current_target do
+  defp on_service_success(state, service, _health_response) do
+    service_state = state.services[service]
+
+    case service_state.current_target do
       :air ->
         # Already on air, good
-        Logger.debug("[BridgeHealthMonitor] Air bridge healthy (primary active)")
-        %{state | consecutive_failures: 0, last_air_success_time: DateTime.utc_now()}
+        Logger.debug("[MultiServiceHealthMonitor] #{service} air healthy (primary active)")
+
+        updated_service = %{
+          service_state
+          | consecutive_failures: 0,
+            last_air_success_time: DateTime.utc_now()
+        }
+
+        %{state | services: Map.put(state.services, service, updated_service)}
 
       :mini ->
         # Air recovered after being down
-        Logger.info("[BridgeHealthMonitor] Air bridge recovered, preparing failback")
-        publish_failover_signal("prefer_air")
-        # Continue checking air every 15 min to see if it stays healthy
-        %{
-          state
+        Logger.info("[MultiServiceHealthMonitor] #{service} air recovered, preparing failback")
+        publish_failover_signal(service, "prefer_air")
+
+        updated_service = %{
+          service_state
           | consecutive_failures: 0,
             last_air_success_time: DateTime.utc_now(),
             last_air_attempt_time: DateTime.utc_now()
         }
+
+        %{state | services: Map.put(state.services, service, updated_service)}
     end
   end
 
-  defp on_air_failure(state) do
-    new_failures = state.consecutive_failures + 1
+  defp on_service_failure(state, service) do
+    service_state = state.services[service]
+    new_failures = service_state.consecutive_failures + 1
 
     cond do
       new_failures < @failure_threshold ->
         Logger.warning(
-          "[BridgeHealthMonitor] Air bridge health check #{new_failures}/#{@failure_threshold} failed"
+          "[MultiServiceHealthMonitor] #{service} air health check #{new_failures}/#{@failure_threshold} failed"
         )
 
-        %{state | consecutive_failures: new_failures, last_air_attempt_time: DateTime.utc_now()}
+        updated_service = %{
+          service_state
+          | consecutive_failures: new_failures,
+            last_air_attempt_time: DateTime.utc_now()
+        }
+
+        %{state | services: Map.put(state.services, service, updated_service)}
 
       new_failures == @failure_threshold ->
         Logger.error(
-          "[BridgeHealthMonitor] Air bridge failed #{@failure_threshold} times, activating mini"
+          "[MultiServiceHealthMonitor] #{service} air failed #{@failure_threshold} times, activating mini"
         )
 
-        publish_failover_signal("activate_mini")
+        publish_failover_signal(service, "activate_mini")
 
-        %{
-          state
+        updated_service = %{
+          service_state
           | consecutive_failures: new_failures,
             current_target: :mini,
             last_air_attempt_time: DateTime.utc_now()
         }
 
+        %{state | services: Map.put(state.services, service, updated_service)}
+
       true ->
         # Already on mini, continue retrying air
-        Logger.warning("[BridgeHealthMonitor] Air still unavailable, will retry in 15 min")
+        Logger.warning(
+          "[MultiServiceHealthMonitor] #{service} air still unavailable, will retry in 15 min"
+        )
 
-        %{
-          state
+        updated_service = %{
+          service_state
           | consecutive_failures: new_failures,
             last_air_attempt_time: DateTime.utc_now()
         }
+
+        %{state | services: Map.put(state.services, service, updated_service)}
     end
   end
 
-  defp publish_failover_signal(action) do
+  defp publish_failover_signal(service, action) do
     try do
       case GenServer.call(Connection, :get_connection, 5_000) do
         {:ok, conn} ->
-          payload = Jason.encode!(%{"service" => "bridge", "action" => action})
+          payload = Jason.encode!(%{"service" => Atom.to_string(service), "action" => action})
           Gnat.pub(conn, "system.failover.request", payload)
-          Logger.info("[BridgeHealthMonitor] Published failover signal: #{action}")
+
+          Logger.info(
+            "[MultiServiceHealthMonitor] Published #{service} failover signal: #{action}"
+          )
 
         {:error, reason} ->
           Logger.error(
-            "[BridgeHealthMonitor] Failed to publish failover signal: #{inspect(reason)}"
+            "[MultiServiceHealthMonitor] Failed to publish #{service} failover signal: #{inspect(reason)}"
           )
       end
     rescue
       e ->
-        Logger.error("[BridgeHealthMonitor] Exception publishing failover: #{inspect(e)}")
+        Logger.error(
+          "[MultiServiceHealthMonitor] Exception publishing #{service} failover: #{inspect(e)}"
+        )
     end
-  end
-
-  defp schedule_health_check(interval) do
-    Process.send_after(self(), :health_check, interval)
   end
 end
