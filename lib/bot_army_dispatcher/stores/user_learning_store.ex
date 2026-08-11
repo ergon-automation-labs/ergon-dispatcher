@@ -49,19 +49,19 @@ defmodule BotArmyDispatcher.Stores.UserLearningStore do
   end
 
   def mark_reviewed(learning_id) do
-    learning = Repo.get(UserLearning, learning_id)
+    case Repo.get(UserLearning, learning_id) do
+      {:ok, learning} ->
+        changeset =
+          UserLearning.changeset(learning, %{
+            review_count: learning.review_count + 1,
+            last_reviewed_at: DateTime.utc_now(),
+            next_review_at: calculate_next_review(learning)
+          })
 
-    if learning do
-      changeset =
-        UserLearning.changeset(learning, %{
-          review_count: learning.review_count + 1,
-          last_reviewed_at: DateTime.utc_now(),
-          next_review_at: calculate_next_review(learning)
-        })
+        Repo.update(changeset)
 
-      Repo.update(changeset)
-    else
-      {:error, :not_found}
+      {:error, _reason} ->
+        {:error, :not_found}
     end
   end
 
@@ -77,20 +77,20 @@ defmodule BotArmyDispatcher.Stores.UserLearningStore do
   end
 
   def update_with_insights(learning_id, insights_data) do
-    learning = Repo.get(UserLearning, learning_id)
+    case Repo.get(UserLearning, learning_id) do
+      {:ok, learning} ->
+        changeset =
+          UserLearning.changeset(learning, %{
+            insights: insights_data["insights"],
+            patterns: insights_data["patterns"] || [],
+            relevance_score: insights_data["relevance_score"],
+            retention_recommendation: insights_data["retention_recommendation"]
+          })
 
-    if learning do
-      changeset =
-        UserLearning.changeset(learning, %{
-          insights: insights_data["insights"],
-          patterns: insights_data["patterns"] || [],
-          relevance_score: insights_data["relevance_score"],
-          retention_recommendation: insights_data["retention_recommendation"]
-        })
+        Repo.update(changeset)
 
-      Repo.update(changeset)
-    else
-      {:error, :not_found}
+      {:error, _reason} ->
+        {:error, :not_found}
     end
   end
 end

@@ -17,6 +17,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_repo()
       |> maybe_add_health_observer()
       |> maybe_add_system_observer()
+      |> maybe_add_bridge_health_monitor()
       |> maybe_add_log_error_scanner()
       |> maybe_add_daily_briefing_orchestrator()
       |> maybe_add_daily_reflection_orchestrator()
@@ -53,6 +54,12 @@ defmodule BotArmyDispatcher.Application do
 
   defp maybe_add_system_observer(children) do
     if env() == :test, do: children, else: [{BotArmyDispatcher.SystemObserver, []} | children]
+  end
+
+  defp maybe_add_bridge_health_monitor(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyDispatcher.BridgeHealthMonitor, []} | children]
   end
 
   defp maybe_add_log_error_scanner(children) do

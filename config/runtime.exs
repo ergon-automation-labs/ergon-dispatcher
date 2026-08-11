@@ -7,7 +7,8 @@ config :bot_army_dispatcher, BotArmyDispatcher.Repo,
   hostname: System.get_env("DATABASE_HOST") || "localhost",
   port: String.to_integer(System.get_env("DATABASE_PORT") || "30003"),
   username: System.get_env("DATABASE_USER") || "postgres",
-  password: System.get_env("DATABASE_PASSWORD") || "postgres"
+  password: System.get_env("DATABASE_PASSWORD") || "postgres",
+  pool_size: System.get_env("BOT_POOL_SIZE", "5") |> String.to_integer()
 
 # Learning library configuration (uses same database as this bot)
 config :bot_army_library_learning, ecto_repos: [BotArmyLearning.Repo]
@@ -21,8 +22,6 @@ config :bot_army_library_learning, BotArmyLearning.Repo,
   username: System.get_env("DATABASE_USER") || "postgres",
   password: System.get_env("DATABASE_PASSWORD") || "postgres",
   pool_size: System.get_env("BOT_POOL_SIZE", "15") |> String.to_integer(),
-
-
   migrations_paths: ["priv/repo/migrations"]
 
 config :bot_army_dispatcher,

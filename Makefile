@@ -71,12 +71,6 @@ compile:
 deps:
 	$(MIX) deps.get
 
-compile:
-	@LOG_FILE="/tmp/compile-dispatcher-$$(date +%s).log"; \
-	echo "Compiling dispatcher and logging to $$LOG_FILE..."; \
-	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Compilation log: $$LOG_FILE"
-
 test:
 	@BOT_NAME=dispatcher; \
 	LOG_FILE="/tmp/test-$${BOT_NAME}-$$(date +%s).log"; \
