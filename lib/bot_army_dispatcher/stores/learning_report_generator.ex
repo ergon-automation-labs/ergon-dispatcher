@@ -19,23 +19,24 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
     today_start = %{now | hour: 0, minute: 0, second: 0, microsecond: {0, 0}}
     today_end = DateTime.add(today_start, 24 * 3600, :second)
 
-    learnings =
-      Repo.all(
-        from(l in UserLearning,
-          where: l.created_at >= ^today_start and l.created_at < ^today_end,
-          order_by: [desc: l.created_at]
-        )
-      )
-
-    case learnings do
-      [] ->
+    case Repo.all(
+           from(l in UserLearning,
+             where: l.created_at >= ^today_start and l.created_at < ^today_end,
+             order_by: [desc: l.created_at]
+           )
+         ) do
+      {:ok, []} ->
         Logger.info("[LearningReportGenerator] No learnings captured today")
         {:ok, nil}
 
-      learnings ->
+      {:ok, learnings} ->
         report = build_report(learnings)
         publish_report(report)
         {:ok, report}
+
+      {:error, reason} ->
+        Logger.error("[LearningReportGenerator] Failed to fetch learnings: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 

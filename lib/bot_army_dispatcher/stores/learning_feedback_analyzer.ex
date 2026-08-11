@@ -34,23 +34,24 @@ defmodule BotArmyDispatcher.Stores.LearningFeedbackAnalyzer do
 
     cutoff = DateTime.add(DateTime.utc_now(), -@lookback_days * 24 * 3600, :second)
 
-    learnings =
-      Repo.all(
-        from(l in UserLearning,
-          where: l.created_at > ^cutoff,
-          order_by: [desc: l.created_at]
-        )
-      )
-
-    case learnings do
-      [] ->
+    case Repo.all(
+           from(l in UserLearning,
+             where: l.created_at > ^cutoff,
+             order_by: [desc: l.created_at]
+           )
+         ) do
+      {:ok, []} ->
         Logger.info("[LearningFeedbackAnalyzer] No learnings in lookback period")
         {:ok, nil}
 
-      learnings ->
+      {:ok, learnings} ->
         analysis = build_analysis(learnings)
         publish_feedback(analysis)
         {:ok, analysis}
+
+      {:error, reason} ->
+        Logger.error("[LearningFeedbackAnalyzer] Failed to fetch learnings: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 

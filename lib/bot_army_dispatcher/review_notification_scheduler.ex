@@ -49,15 +49,20 @@ defmodule BotArmyDispatcher.ReviewNotificationScheduler do
     Logger.debug("[ReviewNotificationScheduler] Checking for learnings due for review")
 
     case fetch_due_learnings() do
-      [] ->
+      {:ok, []} ->
         Logger.debug("[ReviewNotificationScheduler] No learnings due for review")
 
-      due_learnings ->
+      {:ok, due_learnings} ->
         Logger.info(
           "[ReviewNotificationScheduler] Found #{Enum.count(due_learnings)} learnings due"
         )
 
         send_notifications(due_learnings, state)
+
+      {:error, reason} ->
+        Logger.warning(
+          "[ReviewNotificationScheduler] Failed to fetch learnings: #{inspect(reason)}"
+        )
     end
 
     Process.send_after(self(), :check_due_learnings, @check_interval_ms)
