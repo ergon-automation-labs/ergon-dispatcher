@@ -38,14 +38,18 @@ defmodule BotArmyDispatcher.IncidentStore do
              limit: 1
            )
          ) do
-      nil ->
+      {:ok, nil} ->
         Logger.warning("[IncidentStore] No pending incident found for #{bot_name}")
         {:error, :not_found}
 
-      incident ->
+      {:ok, incident} ->
         incident
         |> Incident.changeset(attrs)
         |> Repo.update()
+
+      {:error, reason} ->
+        Logger.error("[IncidentStore] Failed to look up pending incident: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -88,13 +92,13 @@ defmodule BotArmyDispatcher.IncidentStore do
 
     total_count = Repo.aggregate(query, :count)
 
-    incidents =
-      query
-      |> limit(^limit)
-      |> offset(^offset)
-      |> Repo.all()
+    case query |> limit(^limit) |> offset(^offset) |> Repo.all() do
+      {:ok, incidents} ->
+        {:ok, %{incidents: incidents, total_count: total_count, limit: limit, offset: offset}}
 
-    {:ok, %{incidents: incidents, total_count: total_count, limit: limit, offset: offset}}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp apply_bot_filter(query, opts) do

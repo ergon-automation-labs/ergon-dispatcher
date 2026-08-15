@@ -31,3 +31,12 @@ config :bot_army_dispatcher,
     "github.issue" => "triage",
     "surface.build" => "diagnose"
   }
+
+# config/test.exs was never imported, so its bot_army_dispatcher_test
+# database name was dead code — every mix test run used the database:
+# above unmodified, same name/port as dev. Only test.exs exists in this
+# repo (no dev.exs), hence the explicit :test check rather than the usual
+# import_config "#{config_env()}.exs", which would raise for :dev.
+if config_env() == :test do
+  import_config "test.exs"
+end

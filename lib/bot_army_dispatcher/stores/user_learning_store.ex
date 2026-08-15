@@ -45,23 +45,29 @@ defmodule BotArmyDispatcher.Stores.UserLearningStore do
           query
       end
 
-    Repo.all(query)
+    case Repo.all(query) do
+      {:ok, learnings} ->
+        learnings
+
+      {:error, reason} ->
+        Logger.error("Failed to list learnings: #{inspect(reason)}")
+        []
+    end
   end
 
   def mark_reviewed(learning_id) do
     case Repo.get(UserLearning, learning_id) do
-      {:ok, learning} ->
-        changeset =
-          UserLearning.changeset(learning, %{
-            review_count: learning.review_count + 1,
-            last_reviewed_at: DateTime.utc_now(),
-            next_review_at: calculate_next_review(learning)
-          })
-
-        Repo.update(changeset)
-
-      {:error, _reason} ->
+      nil ->
         {:error, :not_found}
+
+      learning ->
+        learning
+        |> UserLearning.changeset(%{
+          review_count: learning.review_count + 1,
+          last_reviewed_at: DateTime.utc_now(),
+          next_review_at: calculate_next_review(learning)
+        })
+        |> Repo.update()
     end
   end
 
@@ -78,19 +84,18 @@ defmodule BotArmyDispatcher.Stores.UserLearningStore do
 
   def update_with_insights(learning_id, insights_data) do
     case Repo.get(UserLearning, learning_id) do
-      {:ok, learning} ->
-        changeset =
-          UserLearning.changeset(learning, %{
-            insights: insights_data["insights"],
-            patterns: insights_data["patterns"] || [],
-            relevance_score: insights_data["relevance_score"],
-            retention_recommendation: insights_data["retention_recommendation"]
-          })
-
-        Repo.update(changeset)
-
-      {:error, _reason} ->
+      nil ->
         {:error, :not_found}
+
+      learning ->
+        learning
+        |> UserLearning.changeset(%{
+          insights: insights_data["insights"],
+          patterns: insights_data["patterns"] || [],
+          relevance_score: insights_data["relevance_score"],
+          retention_recommendation: insights_data["retention_recommendation"]
+        })
+        |> Repo.update()
     end
   end
 end

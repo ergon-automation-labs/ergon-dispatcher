@@ -34,7 +34,7 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
     cutoff_time = DateTime.add(DateTime.utc_now(), -@lookback_hours * 3600, :second)
     difficulty = learning.difficulty_level
 
-    cluster =
+    result =
       Repo.all(
         from(l in UserLearning,
           where:
@@ -48,7 +48,17 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
         )
       )
 
-    if Enum.empty?(cluster), do: [], else: [learning | cluster]
+    case result do
+      {:ok, cluster} ->
+        if Enum.empty?(cluster), do: [], else: [learning | cluster]
+
+      {:error, reason} ->
+        Logger.warning(
+          "[InsightsExtractor] Failed to cluster similar learnings: #{inspect(reason)}"
+        )
+
+        []
+    end
   end
 
   defp analyze_cluster(learning, cluster) do
