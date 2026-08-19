@@ -8,6 +8,7 @@ defmodule BotArmyDispatcher.Application do
 
   use Application
 
+  @version Mix.Project.config()[:version]
   defp env, do: String.to_atom(System.get_env("MIX_ENV") || "prod")
 
   @impl true
@@ -39,6 +40,7 @@ defmodule BotArmyDispatcher.Application do
       |> maybe_add_retry_outcome_collector()
       |> maybe_add_retry_learning()
       |> maybe_add_command_suggester_responder()
+      |> maybe_add_health_responder()
 
     opts = [strategy: :one_for_one, name: BotArmyDispatcher.Supervisor]
     Supervisor.start_link(children, opts)
@@ -46,6 +48,18 @@ defmodule BotArmyDispatcher.Application do
 
   defp maybe_add_repo(children) do
     if env() == :test, do: children, else: [{BotArmyDispatcher.Repo, []} | children]
+  end
+
+  defp maybe_add_health_responder(children) do
+    if env() == :test do
+      children
+    else
+      children ++
+        [
+          {BotArmyLibraryRuntime.Health.Responder,
+           [bot_name: :dispatcher, repo: BotArmyDispatcher.Repo, version: @version]}
+        ]
+    end
   end
 
   defp maybe_add_health_observer(children) do
