@@ -26,3 +26,6 @@ mix.lock
 _build_cursor_test/
 .push-validated
 .compile-hash
+
+# runtime publish/validation state markers (never commit)
+.release-published
