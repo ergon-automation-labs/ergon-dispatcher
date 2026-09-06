@@ -173,12 +173,25 @@ publish-release:
 	echo "✓ Release published to GitHub"; \
 	$(MAKE) sync-release-version; \
 	echo ""; \
-	echo "Publishing deploy.release.requested to NATS..."; \
+	echo "Requesting deploy via deploy pipeline (deploy.release.requested.<target>)..."; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
 	REPO_SLUG=$$(git config --get remote.origin.url | sed 's/.*\///; s/\.git$$//'); \
 	NATS_SERVERS=$${NATS_SERVERS:-nats://localhost:4222}; \
-	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
-	echo "✓ Deploy event published (deploy_pipeline_bot will pick it up)"; \
+	DEPLOY_TARGET=$${DEPLOY_TARGET:-air}; \
+	if [ "$$DEPLOY_TARGET" = "skip" ]; then \
+		echo "(DEPLOY_TARGET=skip - pipeline deploy not requested)"; \
+	else \
+		REQUEST_ID="pub-$$(date +%s)-$$RANDOM"; \
+		ENVELOPE=$$(jq -n \
+			--arg eid "$$(uuidgen | tr 'A-Z' 'a-z')" \
+			--arg ts "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+			--arg node "$$(hostname -s)" \
+			--arg payload "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" --arg target "$${DEPLOY_TARGET}" --arg rid "$$REQUEST_ID" '{bot: $$bot, repo: $$repo, version: $$version, tag: $$tag, release_tag: $$tag, target: $$target, request_id: $$rid}')" \
+			'{event_id: $$eid, event: "deploy.release.requested", schema_version: "1.0", timestamp: $$ts, source: "publish_release", source_node: $$node, triggered_by: "user", payload: ($$payload | fromjson)}'); \
+		RESP=$$(nats --server "$$NATS_SERVERS" request "deploy.release.requested.$${DEPLOY_TARGET}" "$$ENVELOPE" --timeout 15s 2>/dev/null) \
+			&& echo "✓ Deploy requested via pipeline (ack: $${RESP:0:160})" \
+			|| echo "⚠️  Deploy request unanswered (pipeline down?) - deploy manually: cd ../bot_army_infra && make salt-apply-bot BOT=$${BOT_NAME}"; \
+	fi; \
 	echo ""; \
 	echo "✓ Publish-release log: $$LOG_FILE"; \
 	} 2>&1 | tee "$$LOG_FILE"
