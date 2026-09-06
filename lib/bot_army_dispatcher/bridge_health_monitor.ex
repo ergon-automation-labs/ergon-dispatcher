@@ -38,8 +38,31 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
   # Reconnect delay for NATS issues
   @reconnect_delay_ms 5_000
 
-  # Services to monitor
+  # Services to monitor.
+  # P10 (2026-09-06, Docker fleet test): this list encodes the operator's
+  # multi-node topology (air/mini). In a single-VM Docker fleet nothing
+  # answers bot_army.<svc>.health.air and the monitor logs "failed 3 times,
+  # activating mini" forever. DISPATCHER_HEALTH_SERVICES overrides the list
+  # (comma-separated); unset keeps the legacy default, set-but-empty idles
+  # the monitor (starter ships an empty value).
   @monitored_services [:bridge, :synapse, :sre_bot]
+
+  defp monitored_services do
+    case System.get_env("DISPATCHER_HEALTH_SERVICES") do
+      nil ->
+        @monitored_services
+
+      "" ->
+        []
+
+      csv ->
+        csv
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.map(&String.to_atom/1)
+    end
+  end
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: @name)
@@ -49,7 +72,7 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
   def init(_opts) do
     # Initialize per-service health tracking
     services =
-      Map.new(@monitored_services, fn service ->
+      Map.new(monitored_services(), fn service ->
         {service,
          %{
            consecutive_failures: 0,
@@ -81,7 +104,7 @@ defmodule BotArmyDispatcher.BridgeHealthMonitor do
 
         # Schedule first health checks for all services
         timers =
-          Map.new(@monitored_services, fn service ->
+          Map.new(monitored_services(), fn service ->
             timer =
               Process.send_after(self(), {:health_check, service}, @health_check_interval_ms)
 
