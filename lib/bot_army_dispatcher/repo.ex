@@ -3,8 +3,9 @@ defmodule BotArmyDispatcher.Repo do
     otp_app: :bot_army_dispatcher,
     adapter: Ecto.Adapters.Postgres
 
-  # Note: CircuitBreakerRepo wraps all Repo operations in {:ok, value} | {:error, reason}
-  # tuples, which differs from standard Ecto.Repo callback signatures. This causes a
-  # dialyzer callback_type_mismatch warning that is expected and safe to ignore.
-  # All code that uses this Repo should handle result tuples appropriately.
+  # Note: CircuitBreakerRepo wraps insert/update/delete/transaction in
+  # {:ok, value} | {:error, reason} tuples, but keeps all/one/aggregate/get RAW
+  # (bare list / struct / nil) — they raise, like standard Ecto, when the
+  # circuit breaker is open. Match tuples only on the mutating callbacks;
+  # don't match {:ok, _} on Repo.all/Repo.one results.
 end

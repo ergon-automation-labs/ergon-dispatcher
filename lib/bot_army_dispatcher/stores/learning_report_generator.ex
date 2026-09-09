@@ -25,18 +25,14 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
              order_by: [desc: l.captured_at]
            )
          ) do
-      {:ok, []} ->
+      [] ->
         Logger.info("[LearningReportGenerator] No learnings captured today")
         {:ok, nil}
 
-      {:ok, learnings} ->
+      learnings when is_list(learnings) ->
         report = build_report(learnings)
         publish_report(report)
         {:ok, report}
-
-      {:error, reason} ->
-        Logger.error("[LearningReportGenerator] Failed to fetch learnings: #{inspect(reason)}")
-        {:error, reason}
     end
   end
 

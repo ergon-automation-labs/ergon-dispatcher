@@ -48,16 +48,11 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
         )
       )
 
+    # CircuitBreakerRepo keeps all/2 raw: `result` is the bare list (or the
+    # call raises when the breaker is open) — never a {:ok, _}/{:error, _}.
     case result do
-      {:ok, cluster} ->
+      cluster when is_list(cluster) ->
         if Enum.empty?(cluster), do: [], else: [learning | cluster]
-
-      {:error, reason} ->
-        Logger.warning(
-          "[InsightsExtractor] Failed to cluster similar learnings: #{inspect(reason)}"
-        )
-
-        []
     end
   end
 

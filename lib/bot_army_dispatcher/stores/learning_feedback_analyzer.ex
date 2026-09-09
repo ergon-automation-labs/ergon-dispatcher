@@ -40,18 +40,14 @@ defmodule BotArmyDispatcher.Stores.LearningFeedbackAnalyzer do
              order_by: [desc: l.captured_at]
            )
          ) do
-      {:ok, []} ->
+      [] ->
         Logger.info("[LearningFeedbackAnalyzer] No learnings in lookback period")
         {:ok, nil}
 
-      {:ok, learnings} ->
+      learnings when is_list(learnings) ->
         analysis = build_analysis(learnings)
         publish_feedback(analysis)
         {:ok, analysis}
-
-      {:error, reason} ->
-        Logger.error("[LearningFeedbackAnalyzer] Failed to fetch learnings: #{inspect(reason)}")
-        {:error, reason}
     end
   end
 

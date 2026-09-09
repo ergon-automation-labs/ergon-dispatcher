@@ -92,12 +92,14 @@ defmodule BotArmyDispatcher.IncidentStore do
 
     total_count = Repo.aggregate(query, :count)
 
-    case query |> limit(^limit) |> offset(^offset) |> Repo.all() do
-      {:ok, incidents} ->
-        {:ok, %{incidents: incidents, total_count: total_count, limit: limit, offset: offset}}
-
-      {:error, reason} ->
-        {:error, reason}
+    # CircuitBreakerRepo keeps all/2 raw: it returns the bare list (or raises
+    # when the breaker is open). Rescue the raise so this function keeps its
+    # {:ok, map}/{:error, reason} contract for callers.
+    try do
+      incidents = query |> limit(^limit) |> offset(^offset) |> Repo.all()
+      {:ok, %{incidents: incidents, total_count: total_count, limit: limit, offset: offset}}
+    rescue
+      e -> {:error, {:database_unavailable, Exception.message(e)}}
     end
   end
 

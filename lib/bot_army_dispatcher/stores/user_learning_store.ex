@@ -45,14 +45,10 @@ defmodule BotArmyDispatcher.Stores.UserLearningStore do
           query
       end
 
-    case Repo.all(query) do
-      {:ok, learnings} ->
-        learnings
-
-      {:error, reason} ->
-        Logger.error("Failed to list learnings: #{inspect(reason)}")
-        []
-    end
+    # CircuitBreakerRepo keeps all/2 raw: it returns the bare list (or raises
+    # when the breaker is open) — unlike insert/update/delete, which are
+    # tuple-wrapped. Match accordingly.
+    Repo.all(query)
   end
 
   def mark_reviewed(learning_id) do
