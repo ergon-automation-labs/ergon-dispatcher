@@ -38,12 +38,12 @@ defmodule BotArmyDispatcher.Stores.InsightsExtractor do
       Repo.all(
         from(l in UserLearning,
           where:
-            l.created_at > ^cutoff_time and
+            l.captured_at > ^cutoff_time and
               l.id != ^learning.id and
               (l.difficulty_level == ^difficulty or
                  (^difficulty == "medium" and l.difficulty_level in ["easy", "hard"]) or
                  (^difficulty in ["easy", "hard"] and l.difficulty_level == "medium")),
-          order_by: [desc: l.created_at],
+          order_by: [desc: l.captured_at],
           limit: @cluster_size
         )
       )

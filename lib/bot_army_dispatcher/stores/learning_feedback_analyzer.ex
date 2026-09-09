@@ -36,8 +36,8 @@ defmodule BotArmyDispatcher.Stores.LearningFeedbackAnalyzer do
 
     case Repo.all(
            from(l in UserLearning,
-             where: l.created_at > ^cutoff,
-             order_by: [desc: l.created_at]
+             where: l.captured_at > ^cutoff,
+             order_by: [desc: l.captured_at]
            )
          ) do
       {:ok, []} ->
@@ -274,7 +274,7 @@ defmodule BotArmyDispatcher.Stores.LearningFeedbackAnalyzer do
     by_hour =
       learnings
       |> Enum.group_by(fn l ->
-        l.created_at |> DateTime.to_iso8601() |> String.slice(11..12) |> String.to_integer()
+        l.captured_at |> DateTime.to_iso8601() |> String.slice(11..12) |> String.to_integer()
       end)
       |> Enum.map(fn {hour, items} -> {hour, Enum.count(items)} end)
       |> Enum.sort_by(fn {_h, count} -> -count end)

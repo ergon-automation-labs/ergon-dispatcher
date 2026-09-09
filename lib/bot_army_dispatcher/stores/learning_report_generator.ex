@@ -21,8 +21,8 @@ defmodule BotArmyDispatcher.Stores.LearningReportGenerator do
 
     case Repo.all(
            from(l in UserLearning,
-             where: l.created_at >= ^today_start and l.created_at < ^today_end,
-             order_by: [desc: l.created_at]
+             where: l.captured_at >= ^today_start and l.captured_at < ^today_end,
+             order_by: [desc: l.captured_at]
            )
          ) do
       {:ok, []} ->
