@@ -67,8 +67,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           intent_id,
           "dispatcher.heal",
           "act",
-          "success",
-          :dispatcher_outcome_tracker
+          "success"
         )
 
         publish_audit_event(target_bot, intent_id, :dispatched)
@@ -81,8 +80,7 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
           intent_id,
           "dispatcher.heal",
           "act",
-          "failure",
-          :dispatcher_outcome_tracker
+          "failure"
         )
 
         case BotArmyDispatcher.IncidentStore.update_most_recent(target_bot, %{
@@ -234,7 +232,10 @@ defmodule BotArmyDispatcher.Handlers.SelfHealHandler do
       "action" => action
     }
 
-    case BotArmyLibraryRuntime.NATS.Publisher.publish("events.dispatcher.self_heal.dispatched", audit) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish(
+           "events.dispatcher.self_heal.dispatched",
+           audit
+         ) do
       {:ok, _} ->
         Logger.debug("[SelfHealHandler] Audit event published for #{target_bot}")
 

@@ -166,7 +166,7 @@ defmodule BotArmyDispatcher.Application do
       do: children,
       else: [
         {BotArmyLibraryLearning.OutcomeTracker,
-         [name: :dispatcher_outcome_tracker, repo: BotArmyDispatcher.Repo]}
+         [name: BotArmyLibraryLearning.OutcomeTracker, repo: BotArmyDispatcher.Repo]}
         | children
       ]
   end
