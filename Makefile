@@ -266,7 +266,7 @@ git-push: pre-push-cleanup
 	@BOT_NAME=dispatcher; \
 	LOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
 	echo "Pushing to origin/main and logging to $$LOG_FILE..."; \
-	git push 2>&1 | tee "$$LOG_FILE"; \
+	git push > "$$LOG_FILE" 2>&1 || { cat "$$LOG_FILE"; echo "✗ Push failed — log: $$LOG_FILE"; exit 1; }; cat "$$LOG_FILE"; \
 	echo "✓ Log saved: $$LOG_FILE"
 
 push-and-publish: git-push publish-release
