@@ -73,13 +73,6 @@ test:
 	time $(MIX) test 2>&1 | tee "$$LOG_FILE"; \
 	echo "✓ Test log: $$LOG_FILE"
 
-credo:
-	@BOT_NAME=dispatcher; \
-	LOG_FILE="/tmp/credo-$${BOT_NAME}-$$(date +%s).log"; \
-	echo "Running credo and logging to $$LOG_FILE..."; \
-	$(MIX) credo 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Credo log: $$LOG_FILE"
-
 dialyzer: deps
 	$(MIX) dialyzer
 
@@ -233,36 +226,6 @@ publish-release-force:
 	echo "2. Trigger deployment in Jenkins UI or wait for auto-deployment"; \
 	echo "3. Check deployment status: make jenkins-logs"
 
-pre-push-cleanup:
-	@echo "🧹 Cleaning up pre-push artifacts..."
-	@if git diff --quiet git-hooks/pre-push; then \
-		echo "✓ No hook changes"; \
-	else \
-		echo "📋 Staging hook changes..."; \
-		git add git-hooks/pre-push git-hooks/post-push; \
-			git commit -m "chore: sync pre-push hook" || true; \
-	fi
-	@if git diff --quiet mix.lock; then \
-		echo "✓ No lock file changes"; \
-	else \
-		echo "📋 Staging lock file changes..."; \
-		git add mix.lock; \
-		git commit -m "chore: lock file updates from pre-push validation" || true; \
-	fi
-	@echo "✓ Ready to push"
-push: test compile credo pre-push-cleanup
-	@echo "✅ All validations passed"
-	@echo "$$(date +%s)" > .push-validated
-	@echo "✓ Proof-of-validation created"
-	@$(MAKE) git-push
-
-
-git-push: pre-push-cleanup
-	@BOT_NAME=dispatcher; \
-	LOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
-	echo "Pushing to origin/main and logging to $$LOG_FILE..."; \
-	git push > "$$LOG_FILE" 2>&1 || { cat "$$LOG_FILE"; echo "✗ Push failed — log: $$LOG_FILE"; exit 1; }; cat "$$LOG_FILE"; \
-	echo "✓ Log saved: $$LOG_FILE"
 
 push-and-publish: git-push publish-release
 test-integration-report:
@@ -297,13 +260,6 @@ dispatch-test:
 
 
 .PHONY: bump-version
-
-bump-version:
-	@if [ -z "$(BUMP)" ]; then \
-		echo "Usage: make bump-version BUMP=major|minor|patch"; \
-		exit 1; \
-	fi
-	@$(MAKE) -C .. bump-version BOT=$(shell basename $(CURDIR)) BUMP=$(BUMP)
 
 # Shared targets (push, credo, pre-push-cleanup, bump-version, git-push).
 # Defined once in bot_army_infra so they cannot drift per repo.
