@@ -220,7 +220,7 @@ publish-release-force:
 	else \
 		gh release create "v$$VERSION" "$$TARBALL" \
 			--title "Release v$$VERSION" \
-			--notes "Dispatcher Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
+			--notes "Dispatcher Bot Elixir release v$$VERSION." \
 			--draft=false; \
 	fi; \
 	echo "✓ Release published to GitHub"; \
