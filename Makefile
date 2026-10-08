@@ -60,8 +60,11 @@ init:
 _compile-impl:
 	@LOG_FILE="/tmp/compile-dispatcher-$$(date +%s).log"; \
 	echo "Compiling dispatcher and logging to $$LOG_FILE..."; \
+	set -o pipefail; \
 	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Compilation log: $$LOG_FILE"
+	rc=$$?; \
+	echo "✓ Compilation log: $$LOG_FILE"; \
+	exit $$rc
 
 deps:
 	$(MIX) deps.get
@@ -70,8 +73,11 @@ test:
 	@BOT_NAME=dispatcher; \
 	LOG_FILE="/tmp/test-$${BOT_NAME}-$$(date +%s).log"; \
 	echo "Running tests and logging to $$LOG_FILE..."; \
+	set -o pipefail; \
 	time $(MIX) test 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Test log: $$LOG_FILE"
+	rc=$$?; \
+	echo "✓ Test log: $$LOG_FILE"; \
+	exit $$rc
 
 dialyzer: deps
 	$(MIX) dialyzer
