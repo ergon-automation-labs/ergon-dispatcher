@@ -122,7 +122,7 @@ sync-release-version:
 
 publish-release:
 	@BOT_NAME=dispatcher; LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; { \
-	set -e; \
+	set -e; set -o pipefail; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
 		echo "Failed to resolve version from mix.exs"; \
