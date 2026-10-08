@@ -230,7 +230,7 @@ defmodule BotArmyDispatcher.LogErrorScanner do
     |> Enum.take(limit)
     |> Enum.map(fn {ts, signature, bot} ->
       %{
-        "timestamp" => NaiveDateTime.to_iso8601(ts),
+        "timestamp" => BotArmyLibraryRuntime.Timestamp.utc_iso8601(ts),
         "signature" => signature,
         "bot" => bot
       }

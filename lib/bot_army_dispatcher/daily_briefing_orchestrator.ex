@@ -399,7 +399,7 @@ defmodule BotArmyDispatcher.DailyBriefingOrchestrator do
     #{render_health(sections.health_digest)}
 
     ---
-    *Bot Army Daily Briefing — #{NaiveDateTime.to_iso8601(generated_at)}*
+    *Bot Army Daily Briefing — #{BotArmyLibraryRuntime.Timestamp.utc_iso8601(generated_at)}*
     """
   end
 
